@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Owner | Shravani (PM) |
-| Status | Draft v1.0, ready for architecture and implementation planning |
+| Status | Approved v1 |
 | Project | Google Photos Core Experience: memory-based photo retrieval, Part 1 |
 | Companion spec | `docs/extraction_spec.md` (schema, enums, taxonomy, hypothesis rules). This PRD references it and does not repeat it. |
 | Build approach | Spec-driven development in Google Antigravity |
@@ -137,7 +137,7 @@ flowchart LR
     CHAT --> UI
 ```
 
-**Key architectural decision (AD-1): the pipeline runs offline from the PM's machine as a CLI, writing directly to Neon.** The deployed backend only serves read APIs and chat. Reasons: scraping and extraction are slow and quota-bound, Railway's free tier is time-limited, and a read-only deployment makes the demo fast and reliable.
+**Key architectural decision (AD-1): the pipeline runs offline from the PM's machine as a CLI, writing directly to Neon.** The deployed backend never writes research data to the database; its only DB writes are to `chat_cache` (caching chat responses for the 7-day TTL). Rate limiting is enforced in memory. Reasons: scraping and extraction are slow and quota-bound, Railway's free tier is time-limited, and a near-read-only deployment makes the demo fast and reliable.
 
 **AD-2: all heavy analysis is precomputed.** Pages read materialized results; nothing is aggregated by an LLM at request time except chat answers.
 
@@ -354,12 +354,12 @@ All analysis runs in the `analyze` command and writes materialized results. Reco
 |---|---|---|
 | `raw_records` | `record_id` PK, `source`, `item_type` (post, comment, review), `product`, `url`, `author_hash`, `created_at`, `lang`, `text` (nullable after trim), `text_len`, `truncated`, `keyword_hit`, `relevance_class`, `relevance_reason`, `general_failure_modes` text[], `platform`, `mentions_ask_photos`, `ask_photos_note`, `status`, `retry_count`, `last_error`, `extra` jsonb, `ingested_at`, `run_id` | One row per post, comment or review |
 | `episodes` | `episode_id` PK, `record_id` FK, `episode_no`, all scalar fields from spec Section 2.2, `failure_modes` text[], `workarounds` text[], `role_hints` text[], `summary_en`, `quote_original`, `quote_en`, `extraction_confidence`, `prompt_version`, `model_id`, `embedding` halfvec(384) | HNSW index on `embedding` |
-| `episode_cues` | `episode_id` FK, `cue_type`, `value`, `precision` | Remembered cues |
-| `episode_forgotten` | `episode_id` FK, `cue_type`, `evidence` | Explicit only |
-| `episode_queries` | `episode_id` FK, `query_text`, `query_style`, `position` | Order preserved |
+| `episode_cues` | `id` SERIAL PK, `episode_id` FK, `cue_type`, `value`, `precision` | Surrogate PK; remembered cues |
+| `episode_forgotten` | `id` SERIAL PK, `episode_id` FK, `cue_type`, `evidence` | Surrogate PK; explicit only |
+| `episode_queries` | `id` SERIAL PK, `episode_id` FK, `query_text`, `query_style`, `position` | Surrogate PK; order preserved |
 | `hypotheses` | `hypothesis_id` PK (H1 to H8), `title`, `statement`, `status`, `support_count`, `contradict_count`, `relevant_count`, `evidence_strength`, `details` jsonb, `computed_at` | `details` holds distributions for H5 and H6 |
-| `hypothesis_evidence` | `hypothesis_id`, `episode_id`, `direction` | Built by rules |
-| `archetype_stats` | `archetype` PK, counts, distributions jsonb, `avg_severity`, `avg_stakes`, `opportunity_score`, `evidence_strength`, `computed_at` | Materialized |
+| `hypothesis_evidence` | (`hypothesis_id`, `episode_id`) composite PK, `direction`, `rank` | Built by rules; `rank` orders top 5 support / top 3 contradict |
+| `archetype_stats` | `archetype` PK, counts, distributions jsonb, `avg_severity`, `avg_stakes_weight`, `opportunity_score`, `evidence_strength`, `computed_at` | Materialized |
 | `cue_stats` | `cue_type` PK, `remembered_share`, precision mix, `forgotten_count`, `failure_rate`, `gap_score`, `computed_at` | Materialized |
 | `capability_reference` | `cue_type` PK, `searchable` (yes, partial, no), `note`, `verified_how`, `verified_at` | PM curated |
 | `segment_stats` | `dimension`, `value`, `archetype`, counts, outcome mix | P1 |
