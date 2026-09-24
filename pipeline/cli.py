@@ -15,6 +15,9 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import uuid
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -23,6 +26,26 @@ import typer
 _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+from pipeline.config import get_time_cutoff, SOURCE_CAPS, APIFY_TOKEN, SERPAPI_KEY, YOUTUBE_API_KEY
+from pipeline.sources.reddit import RedditSource
+from pipeline.sources.playstore import PlayStoreSource
+from pipeline.sources.appstore import AppStoreSource
+from pipeline.sources.youtube import YouTubeSource
+from pipeline.sources.csv_import import CSVSource
+from pipeline.stages.dedup import run_dedup
+from pipeline.stages.language import run_language_detection
+from pipeline.db import engine
+from sqlalchemy import text
+
+def redact_secrets(msg: str) -> str:
+    """Redact API keys from exception messages (NFR-5, NFR-6)."""
+    if not msg:
+        return msg
+    for secret in (APIFY_TOKEN, SERPAPI_KEY, YOUTUBE_API_KEY):
+        if secret and len(secret) > 4:
+            msg = msg.replace(secret, "***REDACTED***")
+    return msg
 
 app = typer.Typer(
     name="pipeline",
@@ -308,16 +331,94 @@ def seed_capabilities() -> None:
 # Stub commands for future milestones
 # ============================================================
 
+def _log_run(stage: str, source: str, started_at: datetime, ended_at: datetime, counts: dict, errors: list):
+    status = 'failed' if errors else 'completed'
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO pipeline_runs (run_id, stage, source, started_at, ended_at, counts, errors, status)
+                VALUES (:run_id, :stage, :source, :started_at, :ended_at, :counts, :errors, :status)
+            """),
+            {
+                "run_id": str(uuid.uuid4()),
+                "stage": stage,
+                "source": source,
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "counts": json.dumps(counts),
+                "errors": json.dumps(errors),
+                "status": status
+            }
+        )
+
+def _upsert_records(records: list):
+    if not records:
+        return
+    with engine.begin() as conn:
+        for r in records:
+            extra = json.dumps(r.extra) if r.extra else None
+            conn.execute(
+                text("""
+                    INSERT INTO raw_records (record_id, source, item_type, product, url, author_hash, created_at, text, extra, status)
+                    VALUES (:id, :source, :type, :prod, :url, :hash, :dt, :txt, :ext, 'raw')
+                    ON CONFLICT (record_id) DO UPDATE SET
+                        text = CASE WHEN raw_records.status = 'raw' THEN EXCLUDED.text ELSE raw_records.text END,
+                        extra = EXCLUDED.extra
+                """),
+                {
+                    "id": r.record_id, "source": r.source.value, "type": r.item_type.value,
+                    "prod": r.product.value, "url": r.url, "hash": r.author_hash,
+                    "dt": r.created_at, "txt": r.text, "ext": extra
+                }
+            )
+
 @app.command()
 def ingest(source: str = typer.Option("all", help="Source name or 'all'")) -> None:
     """Ingest records from sources (M1)."""
-    typer.echo(f"[STUB] ingest --source {source}")
+    sources_to_run = []
+    if source == "all" or source == "reddit":
+        sources_to_run.append(("reddit", RedditSource(APIFY_TOKEN)))
+    if source == "all" or source == "playstore":
+        sources_to_run.append(("playstore", PlayStoreSource()))
+    if source == "all" or source == "appstore":
+        sources_to_run.append(("appstore", AppStoreSource(SERPAPI_KEY)))
+    if source == "all" or source == "youtube":
+        sources_to_run.append(("youtube", YouTubeSource(YOUTUBE_API_KEY)))
+
+    for name, src in sources_to_run:
+        typer.echo(f"Ingesting from {name}...")
+        started_at = datetime.now(timezone.utc)
+        cap = SOURCE_CAPS.get(name, 1000)
+        try:
+            records = src.fetch(get_time_cutoff(), cap)
+            if hasattr(src, 'errors') and src.errors:
+                errors = [redact_secrets(e) for e in src.errors]
+            else:
+                errors = []
+                
+            _upsert_records(records)
+            ended_at = datetime.now(timezone.utc)
+            counts = {"fetched": len(records), "stored": len(records)}
+            
+            _log_run("ingest", name, started_at, ended_at, counts, errors)
+            typer.echo(f"  ✓ {name} ingested {len(records)} records")
+        except Exception as e:
+            err_msg = redact_secrets(str(e))
+            typer.echo(f"  ✗ Error ingesting {name}: {err_msg}", err=True)
+            _log_run("ingest", name, started_at, datetime.now(timezone.utc), {"fetched": 0, "stored": 0}, [err_msg])
 
 
 @app.command()
 def dedup() -> None:
     """Deduplicate raw records (M1)."""
-    typer.echo("[STUB] dedup")
+    started_at = datetime.now(timezone.utc)
+    counts = run_dedup()
+    lang_counts = run_language_detection()
+    ended_at = datetime.now(timezone.utc)
+    
+    counts.update({"language_" + k: v for k, v in lang_counts.items()})
+    _log_run("dedup", "all", started_at, ended_at, counts, [])
+    typer.echo(f"Dedup and language detection complete: {counts}")
 
 
 @app.command(name="filter")
@@ -359,7 +460,23 @@ def eval_cmd(labels: str = typer.Option(..., help="Path to golden set CSV")) -> 
 @app.command(name="import-csv")
 def import_csv(path: str = typer.Argument(..., help="Path to CSV file")) -> None:
     """Import records from CSV (FR-15)."""
-    typer.echo(f"[STUB] import-csv {path}")
+    started_at = datetime.now(timezone.utc)
+    src = CSVSource(path)
+    try:
+        records = src.fetch(get_time_cutoff(), 100000)
+        
+        errors = [redact_secrets(e) for e in src.errors] if hasattr(src, 'errors') and src.errors else []
+        rejected = src.rejected_count if hasattr(src, 'rejected_count') else 0
+        
+        _upsert_records(records)
+        ended_at = datetime.now(timezone.utc)
+        counts = {"fetched": len(records), "stored": len(records), "rejected": rejected}
+        _log_run("ingest", "csv", started_at, ended_at, counts, errors)
+        typer.echo(f"Imported {len(records)} records from {path} ({rejected} rejected)")
+    except Exception as e:
+        err_msg = redact_secrets(str(e))
+        typer.echo(f"  ✗ Error importing CSV: {err_msg}", err=True)
+        _log_run("ingest", "csv", started_at, datetime.now(timezone.utc), {"fetched": 0, "stored": 0}, [err_msg])
 
 
 @app.command(name="import-literature")

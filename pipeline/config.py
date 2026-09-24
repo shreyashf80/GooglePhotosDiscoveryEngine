@@ -58,6 +58,8 @@ APIFY_TOKEN: str = os.getenv("APIFY_TOKEN", "")
 SERPAPI_KEY: str = os.getenv("SERPAPI_KEY", "")
 YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
 
+APPSTORE_PRODUCT_ID: str = os.getenv("APPSTORE_PRODUCT_ID", "962194608")
+
 # --- Time cutoff (FR-2): only records from the last 24 months ---
 def get_time_cutoff() -> datetime:
     """Compute 24-month cutoff at run time (FR-2)."""
@@ -68,10 +70,10 @@ TIME_CUTOFF: datetime = get_time_cutoff()
 
 # --- Source caps (FR-7) ---
 SOURCE_CAPS: dict[str, int] = {
-    "reddit": _env_int("CAP_REDDIT", 5000),
-    "playstore": _env_int("CAP_PLAYSTORE", 3000),
-    "appstore": _env_int("CAP_APPSTORE", 1000),
-    "youtube": _env_int("CAP_YOUTUBE", 1000),
+    "reddit": _env_int("CAP_REDDIT", 20),
+    "playstore": _env_int("CAP_PLAYSTORE", 50),
+    "appstore": _env_int("CAP_APPSTORE", 2),
+    "youtube": _env_int("CAP_YOUTUBE", 2),
     "community": _env_int("CAP_COMMUNITY", 500),
     "hn": _env_int("CAP_HN", 500),
 }
