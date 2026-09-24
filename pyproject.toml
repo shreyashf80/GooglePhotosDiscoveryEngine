@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recall-gap-discovery-engine"
+version = "0.1.0"
+description = "AI-powered discovery engine for memory-based photo retrieval gaps"
+requires-python = ">=3.11"
+dependencies = [
+    # Shared
+    "pydantic>=2.0,<3.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+pipeline = [
+    "typer[all]>=0.12",
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg2-binary>=2.9",
+    "google-genai>=1.0",
+    "pyyaml>=6.0",
+]
+backend = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "asyncpg>=0.29",
+    "sqlalchemy[asyncio]>=2.0,<3.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["shared*", "pipeline*", "backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

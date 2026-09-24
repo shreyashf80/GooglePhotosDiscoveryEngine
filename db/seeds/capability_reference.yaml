@@ -1,0 +1,112 @@
+# Capability reference seed data (FR-86)
+# PM-curated: for each cue type, whether Google Photos can use it today.
+# searchable: yes | partial | no
+# These are initial values — PM must verify on a real device before M3.
+
+- cue_type: time_absolute
+  searchable: "yes"
+  note: "Google Photos supports date/month/year search and date filters"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: time_season
+  searchable: "partial"
+  note: "Can search by month but not by season name or festival period directly"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: time_life_stage
+  searchable: "no"
+  note: "No concept of life stages in search"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: time_event_anchor
+  searchable: "no"
+  note: "Cannot search relative to other events"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: place_named
+  searchable: "yes"
+  note: "Location search works for geotagged photos"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: place_type
+  searchable: "partial"
+  note: "Some place types recognized (beach, restaurant) but not all"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: person_named
+  searchable: "yes"
+  note: "Face recognition with named labels"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: person_relation
+  searchable: "no"
+  note: "Cannot search by relationship (my mom, my manager)"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: group_social
+  searchable: "partial"
+  note: "Can search for photos with multiple named people, but not group concepts"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: subject_object
+  searchable: "partial"
+  note: "Object recognition works for common objects but misses many specific items"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: scene_activity
+  searchable: "partial"
+  note: "Some activities recognized (hiking, dancing) but coverage is limited"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: text_in_image
+  searchable: "yes"
+  note: "OCR search finds text visible in photos"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: source_sender
+  searchable: "no"
+  note: "Cannot search by who sent a photo"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: conversation_context
+  searchable: "no"
+  note: "No link between photo and the conversation in which it was shared"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: personal_state
+  searchable: "no"
+  note: "Cannot search by how the user felt or what was happening in their life"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: emotional_tone
+  searchable: "no"
+  note: "Cannot search by emotional association"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: purpose_use
+  searchable: "no"
+  note: "Cannot search by why a photo was taken or why it is needed"
+  verified_how: "Not yet verified on device"
+  verified_at: null
+
+- cue_type: adjacency
+  searchable: "no"
+  note: "Cannot search for photos near another photo in time"
+  verified_how: "Not yet verified on device"
+  verified_at: null
