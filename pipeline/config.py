@@ -80,7 +80,7 @@ SOURCE_CAPS: dict[str, int] = {
 
 # --- Batch sizes ---
 FILTER_BATCH_SIZE: int = _env_int("FILTER_BATCH_SIZE", 25)
-EXTRACT_BATCH_SIZE: int = _env_int("EXTRACT_BATCH_SIZE", 15)
+EXTRACT_BATCH_SIZE: int = _env_int("EXTRACT_BATCH_SIZE", 10)
 EMBED_BATCH_SIZE: int = _env_int("EMBED_BATCH_SIZE", 100)
 
 # --- Retry limits ---
@@ -91,3 +91,73 @@ PROJECT_ROOT: Path = _project_root
 MIGRATIONS_DIR: Path = _project_root / "db" / "migrations"
 SEEDS_DIR: Path = _project_root / "db" / "seeds"
 PROMPTS_DIR: Path = _project_root / "pipeline" / "prompts"
+
+# --- FR-30: Keyword prefilter lists ---
+# Broad lists for English, Hindi (Devanagari), and Hinglish (Latin).
+# When in doubt, include the word — Stage 1 LLM will do precise classification.
+
+KEYWORD_PREFILTER_EN: list[str] = [
+    # Core retrieval terms
+    "find", "search", "locate", "looking for", "can't see", "where is",
+    "scroll", "lost track", "remember", "old photo", "old pic",
+    "ask photos",
+    # Expanded retrieval and discovery terms
+    "can't find", "cannot find", "couldn't find", "unable to find",
+    "not finding", "not showing", "won't show", "doesn't show",
+    "missing photo", "missing picture", "missing image",
+    "photo search", "image search", "picture search",
+    "search bar", "search feature", "search function", "search result",
+    "no results", "zero results", "wrong results", "irrelevant results",
+    "too many results", "too many photos",
+    "how do i find", "how to find", "how to search", "how do i search",
+    "hard to find", "difficult to find", "impossible to find",
+    "found it", "found the photo", "finally found",
+    "tried searching", "searched for", "when i search",
+    "face recognition", "face search", "face grouping",
+    "text search", "ocr", "text in photo",
+    "ask photo", "gemini photo", "ai search",
+    "specific photo", "particular photo", "certain photo",
+    "years ago", "months ago", "long time ago",
+    "scrolling", "scroll through", "scrolled",
+    "timeline", "date filter", "date search",
+    "gave up", "give up", "stopped trying",
+    "workaround", "work around",
+    "tip", "trick", "pro tip",
+    "receipt", "document", "medicine", "prescription",
+    "screenshot", "whatsapp photo", "received photo",
+    "sent me", "shared with me",
+]
+
+KEYWORD_PREFILTER_HI: list[str] = [
+    # Hindi (Devanagari)
+    "फोटो", "ढूंढ", "खोज", "नहीं मिल", "तस्वीर",
+    "तलाश", "ढूंढना", "खोजना", "मिल नहीं",
+    "पुरानी फोटो", "पुरानी तस्वीर",
+    "सर्च", "रिजल्ट",
+    "याद", "कहाँ", "कहां",
+    "स्क्रॉल", "स्क्रीनशॉट",
+    "दवाई", "रसीद", "डॉक्यूमेंट",
+]
+
+KEYWORD_PREFILTER_HINGLISH: list[str] = [
+    # Hinglish (Hindi in Latin script)
+    "dhoond", "dhund", "dhundh", "dhoondh",
+    "nahi mil", "nhi mil", "nahin mil",
+    "khoj", "khoji",
+    "photo nahi", "pic nahi", "photo nhi",
+    "purani photo", "purani pic",
+    "kaha hai", "kahan hai", "kidhar",
+    "mil nahi raha", "mil nahi rahi", "milta nahi", "milti nahi",
+    "search kar", "search kiya", "search karo",
+    "scroll kar", "scroll kiya",
+    "yaad", "yaad hai",
+    "woh photo", "wo photo", "woh pic",
+    "screenshot", "whatsapp",
+    "dawai", "dawa", "receipt",
+]
+
+# Combined keyword set (lowercased for matching)
+KEYWORD_PREFILTER_ALL: set[str] = {
+    kw.lower() for kw in
+    KEYWORD_PREFILTER_EN + KEYWORD_PREFILTER_HI + KEYWORD_PREFILTER_HINGLISH
+}

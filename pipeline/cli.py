@@ -12,6 +12,7 @@ References:
 
 from __future__ import annotations
 
+import csv
 import logging
 import os
 import sys
@@ -19,6 +20,7 @@ import uuid
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -42,7 +44,9 @@ def redact_secrets(msg: str) -> str:
     """Redact API keys from exception messages (NFR-5, NFR-6)."""
     if not msg:
         return msg
-    for secret in (APIFY_TOKEN, SERPAPI_KEY, YOUTUBE_API_KEY):
+    from pipeline.config import GEMINI_API_KEYS
+    secrets = [APIFY_TOKEN, SERPAPI_KEY, YOUTUBE_API_KEY] + GEMINI_API_KEYS
+    for secret in secrets:
         if secret and len(secret) > 4:
             msg = msg.replace(secret, "***REDACTED***")
     return msg
@@ -328,7 +332,7 @@ def seed_capabilities() -> None:
 
 
 # ============================================================
-# Stub commands for future milestones
+# Helpers
 # ============================================================
 
 def _log_run(stage: str, source: str, started_at: datetime, ended_at: datetime, counts: dict, errors: list):
@@ -371,6 +375,11 @@ def _upsert_records(records: list):
                     "dt": r.created_at, "txt": r.text, "ext": extra
                 }
             )
+
+
+# ============================================================
+# M1: Ingest commands
+# ============================================================
 
 @app.command()
 def ingest(source: str = typer.Option("all", help="Source name or 'all'")) -> None:
@@ -421,17 +430,190 @@ def dedup() -> None:
     typer.echo(f"Dedup and language detection complete: {counts}")
 
 
-@app.command(name="filter")
-def filter_cmd() -> None:
-    """Run Stage 1 relevance filter (M2)."""
-    typer.echo("[STUB] filter")
+# ============================================================
+# M2: Filter command (T-2.1, T-2.3)
+# ============================================================
 
+@app.command(name="filter")
+def filter_cmd(
+    limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Process at most N records"),
+) -> None:
+    """Run Stage 1 relevance filter (M2). Keyword prefilter + Gemini classification."""
+    from pipeline.stages.filter import run_filter
+
+    typer.echo("Running Stage 1: Relevance filter...")
+    if limit:
+        typer.echo(f"  (limited to {limit} records)")
+
+    counts = run_filter(limit=limit)
+
+    typer.echo("\n📊 Filter results:")
+    typer.echo(f"  Records processed:       {counts.get('processed', 0):>6,d}")
+    typer.echo(f"  Keyword hits:            {counts.get('keyword_hit', 0):>6,d}")
+    typer.echo(f"  EN no-keyword excluded:  {counts.get('keyword_miss_en_excluded', 0):>6,d}")
+    typer.echo(f"  Sent to LLM:             {counts.get('sent_to_llm', 0):>6,d}")
+    typer.echo(f"  Classified relevant:     {counts.get('classified_relevant', 0):>6,d}")
+    typer.echo(f"  Classified excluded:     {counts.get('classified_excluded', 0):>6,d}")
+    typer.echo(f"  LLM errors:              {counts.get('llm_errors', 0):>6,d}")
+
+    # Show relevance class counts
+    typer.echo("\n📈 Relevance class distribution:")
+    from pipeline.db import execute_sql
+    try:
+        rows = execute_sql("""
+            SELECT relevance_class, COUNT(*) as count
+            FROM raw_records
+            WHERE relevance_class IS NOT NULL
+            GROUP BY relevance_class
+            ORDER BY count DESC
+        """)
+        if rows:
+            for row in rows:
+                cls = row.get("relevance_class", "unknown") or "unknown"
+                cnt = row.get("count", 0)
+                typer.echo(f"  {cls:30s} {cnt:>6,d}")
+        else:
+            typer.echo("  (no classified records)")
+    except Exception:
+        pass
+
+
+# ============================================================
+# M2: Extract command (T-2.5a-d)
+# ============================================================
 
 @app.command()
-def extract() -> None:
-    """Run Stage 2 episode extraction (M2)."""
-    typer.echo("[STUB] extract")
+def extract(
+    limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Process at most N records"),
+) -> None:
+    """Run Stage 2 episode extraction (M2). Gemini structured extraction."""
+    from pipeline.stages.extract import run_extract
 
+    typer.echo("Running Stage 2: Episode extraction...")
+    if limit:
+        typer.echo(f"  (limited to {limit} records)")
+
+    counts = run_extract(limit=limit)
+
+    typer.echo("\n📊 Extraction results:")
+    typer.echo(f"  Records processed:       {counts.get('records_processed', 0):>6,d}")
+    typer.echo(f"  Records extracted:       {counts.get('records_extracted', 0):>6,d}")
+    typer.echo(f"  Episodes created:        {counts.get('episodes_created', 0):>6,d}")
+    typer.echo(f"  Records failed:          {counts.get('records_failed', 0):>6,d}")
+    typer.echo(f"  Validation retries:      {counts.get('validation_retries', 0):>6,d}")
+    typer.echo(f"  General complaints:      {counts.get('general_complaints', 0):>6,d}")
+
+
+# ============================================================
+# M2: Trim command (T-2.7)
+# ============================================================
+
+@app.command()
+def trim() -> None:
+    """Null text of excluded records to save storage (FR-32, DR-3)."""
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("""
+                    UPDATE raw_records
+                    SET text = NULL
+                    WHERE status = 'excluded' AND text IS NOT NULL
+                    RETURNING record_id
+                """)
+            )
+            trimmed = result.fetchall()
+            typer.echo(f"Trimmed text from {len(trimmed)} excluded records.")
+    except Exception as e:
+        typer.echo(f"Error trimming records: {e}", err=True)
+        raise typer.Exit(1)
+
+
+# ============================================================
+# M2: export-sample command
+# ============================================================
+
+@app.command(name="export-sample")
+def export_sample(
+    output: str = typer.Option("data/review_sample.csv", "--output", "-o", help="Output CSV path"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Limit number of episodes"),
+) -> None:
+    """Export extracted episodes with original text to CSV for review."""
+    from pipeline.db import execute_sql
+
+    typer.echo("Exporting review sample...")
+
+    query = """
+        SELECT
+            e.episode_id,
+            e.record_id,
+            r.source,
+            r.lang,
+            r.relevance_class,
+            r.created_at as record_created_at,
+            e.target_description,
+            e.photo_category,
+            e.photo_origin,
+            e.photo_age_bucket,
+            e.outcome,
+            e.stakes,
+            e.archetype_primary,
+            e.archetype_secondary,
+            e.emergent_label,
+            e.summary_en,
+            e.quote_original,
+            e.quote_en,
+            e.extraction_confidence,
+            e.prompt_version,
+            e.model_id,
+            e.failure_modes,
+            e.workarounds,
+            r.text as original_text
+        FROM episodes e
+        JOIN raw_records r ON e.record_id = r.record_id
+        ORDER BY e.created_at DESC NULLS LAST
+    """
+    if limit:
+        query += f" LIMIT {int(limit)}"
+
+    try:
+        rows = execute_sql(query)
+        if not rows:
+            typer.echo("No episodes found to export.")
+            return
+
+        # Ensure output directory exists
+        output_path = Path(output)
+        if not output_path.is_absolute():
+            output_path = _project_root / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write CSV
+        fieldnames = list(rows[0].keys())
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                # Convert any list fields to JSON strings for CSV
+                clean_row = {}
+                for k, v in row.items():
+                    if isinstance(v, (list, dict)):
+                        clean_row[k] = json.dumps(v)
+                    elif isinstance(v, datetime):
+                        clean_row[k] = v.isoformat()
+                    else:
+                        clean_row[k] = v
+                writer.writerow(clean_row)
+
+        typer.echo(f"✓ Exported {len(rows)} episodes to {output_path}")
+
+    except Exception as e:
+        typer.echo(f"Error exporting sample: {e}", err=True)
+        raise typer.Exit(1)
+
+
+# ============================================================
+# Stub commands for future milestones
+# ============================================================
 
 @app.command()
 def embed() -> None:
@@ -483,12 +665,6 @@ def import_csv(path: str = typer.Argument(..., help="Path to CSV file")) -> None
 def import_literature(path: str = typer.Argument(..., help="Path to literature file")) -> None:
     """Import literature for RAG (P1)."""
     typer.echo(f"[STUB] import-literature {path}")
-
-
-@app.command()
-def trim() -> None:
-    """Null text of excluded records to save storage (FR-32)."""
-    typer.echo("[STUB] trim")
 
 
 @app.command(name="run-all")

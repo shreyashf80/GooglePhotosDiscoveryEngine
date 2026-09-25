@@ -99,6 +99,36 @@ def test_playstore_source_caps_and_errors(mock_reviews):
     assert len(records) > 0
     assert len(src.errors) > 0
 
+@patch("pipeline.sources.playstore.reviews")
+def test_playstore_source_pagination_cutoff(mock_reviews):
+    # Setup mock to return multiple pages
+    # First page: 1 recent review
+    # Second page: 1 old review
+    page1 = [{"content": "Recent", "userName": "U1", "at": datetime(2023, 10, 10), "reviewId": "1"}]
+    page2 = [{"content": "Old", "userName": "U2", "at": datetime(2021, 10, 10), "reviewId": "2"}]
+    
+    def side_effect(*args, **kwargs):
+        if kwargs.get("lang") != "en":
+            return ([], None)
+        token = kwargs.get("continuation_token")
+        if token is None:
+            return (page1, "token2")
+        elif token == "token2":
+            return (page2, None)
+        return ([], None)
+        
+    mock_reviews.side_effect = side_effect
+    
+    src = PlayStoreSource()
+    cutoff = datetime(2022, 1, 1, tzinfo=timezone.utc)
+    records = src.fetch(cutoff, cap=10)
+    
+    # Should only fetch the recent review and stop, without processing the old one.
+    # Since there are two 'en' locales, it will fetch the recent one twice.
+    assert len(records) == 2
+    assert records[0].text == "Recent"
+    assert mock_reviews.call_count > 0
+
 @patch("pipeline.sources.reddit.ApifyClient")
 def test_reddit_source_caps_and_errors(mock_apify_cls):
     mock_client = MagicMock()

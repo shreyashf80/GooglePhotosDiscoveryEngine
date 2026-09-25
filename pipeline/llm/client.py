@@ -12,13 +12,49 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Type
+import typing
+from typing import Any, Type, get_origin, get_args
 
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 
 from pipeline.llm.key_pool import KeyPool
 
 logger = logging.getLogger(__name__)
+
+def _create_shadow_model(model_cls: Any) -> Any:
+    """Recursively create a Pydantic model clone without validation constraints (FR-40)."""
+    def _shadow_type(typ: Any) -> Any:
+        origin = get_origin(typ)
+        if origin is not None:
+            args = get_args(typ)
+            new_args = tuple(_shadow_type(a) for a in args)
+            if origin is list or origin is typing.List:
+                return list[new_args[0]]
+            elif origin is dict or origin is typing.Dict:
+                return dict[new_args[0], new_args[1]]
+            elif origin is typing.Union or type(origin).__name__ == "UnionType":
+                return typing.Union[new_args]
+            return typ
+            
+        if isinstance(typ, type) and issubclass(typ, BaseModel):
+            return _create_shadow_model(typ)
+        return typ
+
+    if not (isinstance(model_cls, type) and issubclass(model_cls, BaseModel)):
+        origin = get_origin(model_cls)
+        if origin is list or origin is typing.List:
+            return list[_shadow_type(get_args(model_cls)[0])]
+        return model_cls
+
+    fields = {}
+    for field_name, field_info in model_cls.model_fields.items():
+        new_type = _shadow_type(field_info.annotation)
+        if field_info.is_required():
+            fields[field_name] = (new_type, ...)
+        else:
+            fields[field_name] = (new_type, field_info.default)
+            
+    return create_model(f"{model_cls.__name__}Shadow", **fields)
 
 
 class GeminiClient:
@@ -42,11 +78,15 @@ class GeminiClient:
     def _sanitize_message(self, msg: str) -> str:
         """Strip any API keys from error messages before logging or raising (NFR-6)."""
         import re
+        from pipeline.config import GEMINI_API_KEYS
         sanitized = msg
-        # Redact any known keys from the pool
+        # Redact any known keys from the pool and config
         for state in self._key_pool._keys:
             if state.key:
                 sanitized = sanitized.replace(state.key, "[REDACTED_KEY]")
+        for key in GEMINI_API_KEYS:
+            if key and len(key) > 4:
+                sanitized = sanitized.replace(key, "[REDACTED_KEY]")
         # Redact generic Google API key patterns
         sanitized = re.sub(r"AIza[0-9A-Za-z\-_]{35}", "[REDACTED_KEY]", sanitized)
         # Redact key= query parameters
@@ -95,7 +135,7 @@ class GeminiClient:
                 }
                 if response_schema:
                     config_kwargs["response_mime_type"] = "application/json"
-                    config_kwargs["response_schema"] = response_schema
+                    config_kwargs["response_schema"] = _create_shadow_model(response_schema)
 
                 config = types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -144,13 +184,13 @@ class GeminiClient:
                     try:
                         return json.loads(cleaned_text)
                     except json.JSONDecodeError as e:
-                        logger.error(
+                        logger.warning(
                             "JSON parse error from model=%s, key_index=%d: %s",
                             self._model_id,
                             key_index,
                             str(e),
                         )
-                        raise RuntimeError(f"Failed to parse JSON response: {e}") from e
+                        raise ValueError(f"jsondecodeerror: {e}") from e
 
                 return {"text": text, "tokens": token_info}
 
@@ -191,6 +231,7 @@ class GeminiClient:
                         or "unavailable" in error_str
                         or "connection" in error_str
                         or "timeout" in error_str
+                        or "jsondecodeerror" in error_str
                         or getattr(e, "code", None) in (500, 503)
                     )
                     if is_transient and attempt < max_attempts - 1:

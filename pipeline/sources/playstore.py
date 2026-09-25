@@ -27,50 +27,62 @@ class PlayStoreSource(SourceBase):
         for locale in locales:
             lang, country = locale.split("-")
             
-            # Fetch reviews
+            # Fetch reviews in chunks using continuation token
             try:
-                result, _ = reviews(
-                    app_id,
-                    lang=lang,
-                    country=country,
-                    sort=Sort.NEWEST,
-                    count=cap_per_locale
-                )
+                continuation_token = None
+                fetched_for_locale = 0
                 
-                for r in result:
-                    dt = r.get("at")
-                    if not dt:
-                        continue
+                while fetched_for_locale < cap_per_locale:
+                    result, continuation_token = reviews(
+                        app_id,
+                        lang=lang,
+                        country=country,
+                        sort=Sort.NEWEST,
+                        count=min(100, cap_per_locale - fetched_for_locale),
+                        continuation_token=continuation_token
+                    )
                     
-                    # Convert naive datetime to timezone-aware UTC
-                    if dt.tzinfo is None:
-                        from datetime import timezone
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    
-                    if dt < since:
-                        # Since it's sorted NEWEST, we can stop for this locale
+                    if not result:
                         break
+                        
+                    stop_locale = False
+                    for r in result:
+                        dt = r.get("at")
+                        if not dt:
+                            continue
+                        
+                        if dt.tzinfo is None:
+                            from datetime import timezone
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        
+                        if dt < since:
+                            stop_locale = True
+                            break
+                        
+                        text = r.get("content", "").strip()
+                        if not text:
+                            continue
+                        
+                        author = r.get("userName")
+                        review_id = r.get("reviewId")
+                        stars = r.get("score")
                     
-                    text = r.get("content", "").strip()
-                    if not text:
-                        continue
-                    
-                    author = r.get("userName")
-                    review_id = r.get("reviewId")
-                    stars = r.get("score")
-                    
-                    record_id = f"ps_{review_id}" if review_id else f"ps_{uuid.uuid4().hex[:12]}"
-                    
-                    all_records.append(RawRecord(
-                        record_id=record_id,
-                        source=Source.PLAYSTORE,
-                        item_type=ItemType.REVIEW,
-                        product=Product.GOOGLE_PHOTOS,
-                        author_hash=hash_author(author),
-                        created_at=dt,
-                        text=text,
-                        extra={"stars": stars, "locale": locale}
-                    ))
+                        record_id = f"ps_{review_id}" if review_id else f"ps_{uuid.uuid4().hex[:12]}"
+                        
+                        all_records.append(RawRecord(
+                            record_id=record_id,
+                            source=Source.PLAYSTORE,
+                            item_type=ItemType.REVIEW,
+                            product=Product.GOOGLE_PHOTOS,
+                            author_hash=hash_author(author),
+                            created_at=dt,
+                            text=text,
+                            extra={"stars": stars, "locale": locale}
+                        ))
+                        fetched_for_locale += 1
+                        
+                    if stop_locale or not continuation_token:
+                        break
             except Exception as e:
                 logger.error(f"Error fetching Play Store reviews for {locale}: {e}")
                 self.errors.append(f"Error fetching Play Store reviews for {locale}: {e}")
