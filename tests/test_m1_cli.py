@@ -8,23 +8,7 @@ from typer.testing import CliRunner
 
 from pipeline.cli import app, redact_secrets
 
-@pytest.fixture
-def test_engine():
-    engine = create_engine("sqlite:///:memory:")
-    with engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE pipeline_runs (
-                run_id TEXT PRIMARY KEY,
-                stage TEXT,
-                source TEXT,
-                started_at TIMESTAMP,
-                ended_at TIMESTAMP,
-                counts JSON,
-                errors JSON,
-                status TEXT
-            )
-        """))
-    return engine
+from pipeline.db import engine
 
 def test_redact_secrets(monkeypatch):
     import pipeline.cli
@@ -39,9 +23,8 @@ def test_redact_secrets(monkeypatch):
     assert "supersecret2" not in redacted
     assert "***REDACTED***" in redacted
 
-def test_ingest_source_failure_logs_run(test_engine, monkeypatch):
+def test_ingest_source_failure_logs_run(clean_db):
     import pipeline.cli
-    monkeypatch.setattr(pipeline.cli, "engine", test_engine)
     
     mock_src = MagicMock()
     # Ensure it fails
@@ -58,10 +41,10 @@ def test_ingest_source_failure_logs_run(test_engine, monkeypatch):
     assert result.exit_code == 0
     assert "Error ingesting reddit: Custom source exception" in result.output
     
-    with test_engine.begin() as conn:
+    with engine.begin() as conn:
         run = conn.execute(text("SELECT status, errors FROM pipeline_runs WHERE source='reddit'")).fetchone()
         assert run is not None
         assert run.status == 'failed'
-        errors = json.loads(run.errors)
+        errors = run.errors
         assert len(errors) == 1
         assert "Custom source exception" in errors[0]
