@@ -314,7 +314,13 @@ All analysis runs in the `analyze` command and writes materialized results. Reco
 | FR-82 | Stakes weight: `practical_urgent` = 1.5, `sentimental` = 1.3, `practical_routine` = 1.0, `unknown` = 1.0. | P0 |
 | FR-83 | Opportunity score per archetype = `share_of_episodes x avg_severity x avg_stakes_weight`, normalized to 0 to 100 across archetypes. Formula and weights are shown in the UI and configurable. | P0 |
 
-### 10.4 Gap matrix
+### 10.4 Retrieval funnel stages
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-88 | Map episode failures to the retrieval stage where the process broke. Stages: **Express** (vague-only cues, explicit `cues_forgotten`, or no queries tried), **Understand** (`zero_results`, `wrong_results`, `vocabulary_mismatch`, `cue_not_supported`, `ask_photos_failure`), **Evaluate** (`too_many_results` or `timeline_scroll` workaround), **Refine** (`refinement_missing` or 3+ queries tried). An episode can hit multiple stages. Store per stage: episode count, general complaint count (from `general_failure_modes`), gave-up rate, avg severity, evidence strength. Materialized in `funnel_stats` table, computed by the `analyze` command. | P0 |
+
+### 10.5 Gap matrix
 
 | ID | Requirement | Priority |
 |---|---|---|
@@ -360,6 +366,7 @@ All analysis runs in the `analyze` command and writes materialized results. Reco
 | `hypotheses` | `hypothesis_id` PK (H1 to H8), `title`, `statement`, `status`, `support_count`, `contradict_count`, `relevant_count`, `evidence_strength`, `details` jsonb, `computed_at` | `details` holds distributions for H5 and H6 |
 | `hypothesis_evidence` | (`hypothesis_id`, `episode_id`) composite PK, `direction`, `rank` | Built by rules; `rank` orders top 5 support / top 3 contradict |
 | `archetype_stats` | `archetype` PK, counts, distributions jsonb, `avg_severity`, `avg_stakes_weight`, `opportunity_score`, `evidence_strength`, `computed_at` | Materialized |
+| `funnel_stats` | `stage` PK (express, understand, evaluate, refine), `episode_count`, `general_complaint_count`, `gave_up_rate`, `avg_severity`, `evidence_strength`, `details` jsonb, `computed_at` | Materialized (FR-88) |
 | `cue_stats` | `cue_type` PK, `remembered_share`, precision mix, `forgotten_count`, `failure_rate`, `gap_score`, `computed_at` | Materialized |
 | `capability_reference` | `cue_type` PK, `searchable` (yes, partial, no), `note`, `verified_how`, `verified_at` | PM curated |
 | `segment_stats` | `dimension`, `value`, `archetype`, counts, outcome mix | P1 |

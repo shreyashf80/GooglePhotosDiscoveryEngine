@@ -447,6 +447,29 @@ CREATE TABLE archetype_stats (
 );
 ```
 
+#### `funnel_stats` *(FR-88)*
+
+```sql
+CREATE TABLE funnel_stats (
+    stage                   TEXT PRIMARY KEY,       -- express, understand, evaluate, refine
+    episode_count           INTEGER NOT NULL,
+    general_complaint_count INTEGER NOT NULL,       -- from general_failure_modes on excluded records
+    gave_up_rate            REAL NOT NULL,          -- share of stage episodes with gave_up/still_searching
+    avg_severity            REAL NOT NULL,          -- FR-81 scoring
+    evidence_strength       TEXT NOT NULL,          -- strong, directional, anecdotal
+    details                 JSONB,                  -- per-signal breakdown
+    computed_at             TIMESTAMPTZ NOT NULL
+);
+```
+
+Funnel stage mapping rules:
+- **Express**: vague-only cues, explicit `cues_forgotten`, or no queries tried.
+- **Understand**: `zero_results`, `wrong_results`, `vocabulary_mismatch`, `cue_not_supported`, `ask_photos_failure`.
+- **Evaluate**: `too_many_results` or `timeline_scroll` workaround.
+- **Refine**: `refinement_missing` or 3+ queries tried.
+
+An episode can hit multiple stages.
+
 #### `cue_stats` *(FR-85 – FR-87)*
 
 ```sql

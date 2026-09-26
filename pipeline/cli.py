@@ -617,14 +617,68 @@ def export_sample(
 
 @app.command()
 def embed() -> None:
-    """Embed episode summaries (M3)."""
-    typer.echo("[STUB] embed")
+    """Embed episode summaries with fastembed BGE-small (FR-60, FR-61)."""
+    from pipeline.stages.embed import run_embed
+
+    typer.echo("Running embedding stage...")
+    started_at = datetime.now(timezone.utc)
+    counts = run_embed()
+    ended_at = datetime.now(timezone.utc)
+    _log_run("embed", "all", started_at, ended_at, counts, [])
+    typer.echo(f"\n📊 Embedding results:")
+    typer.echo(f"  Episodes embedded:       {counts.get('processed', 0):>6,d}")
 
 
 @app.command()
 def analyze() -> None:
-    """Compute analysis aggregates (M3)."""
-    typer.echo("[STUB] analyze")
+    """Compute archetype_stats and funnel_stats (FR-70, FR-80–FR-83, FR-88)."""
+    from pipeline.stages.analyze import run_analyze
+
+    typer.echo("Running analysis stage...")
+    started_at = datetime.now(timezone.utc)
+    counts = run_analyze()
+    ended_at = datetime.now(timezone.utc)
+    _log_run("analyze", "all", started_at, ended_at, counts, [])
+    typer.echo(f"\n📊 Analysis results:")
+    typer.echo(f"  Total episodes:          {counts.get('total_episodes', 0):>6,d}")
+    typer.echo(f"  Archetypes computed:     {counts.get('archetypes_written', 0):>6,d}")
+    typer.echo(f"  Funnel stages computed:  {counts.get('funnel_stages_written', 0):>6,d}")
+
+    # Print archetype table
+    from pipeline.db import execute_sql
+    typer.echo("\n🏷️  Archetype Stats:")
+    typer.echo(f"  {'Archetype':<25s} {'Count':>6s} {'Share':>6s} {'Sev':>5s} {'Stakes':>6s} {'Score':>6s} {'Evidence':<12s}")
+    typer.echo(f"  {'-'*25} {'-'*6} {'-'*6} {'-'*5} {'-'*6} {'-'*6} {'-'*12}")
+    try:
+        rows = execute_sql(
+            "SELECT * FROM archetype_stats ORDER BY opportunity_score DESC"
+        )
+        for row in rows:
+            typer.echo(
+                f"  {row['archetype']:<25s} {row['episode_count']:>6d} "
+                f"{row['share_of_episodes']:>5.1%} {row['avg_severity']:>5.1f} "
+                f"{row['avg_stakes_weight']:>6.2f} {row['opportunity_score']:>6.1f} "
+                f"{row['evidence_strength']:<12s}"
+            )
+    except Exception:
+        typer.echo("  (could not read archetype_stats)")
+
+    typer.echo("\n🔍 Retrieval Funnel Stats:")
+    typer.echo(f"  {'Stage':<12s} {'Episodes':>8s} {'Complaints':>10s} {'GaveUp%':>8s} {'Sev':>5s} {'Evidence':<12s}")
+    typer.echo(f"  {'-'*12} {'-'*8} {'-'*10} {'-'*8} {'-'*5} {'-'*12}")
+    try:
+        rows = execute_sql(
+            "SELECT * FROM funnel_stats ORDER BY CASE stage WHEN 'express' THEN 1 WHEN 'understand' THEN 2 WHEN 'evaluate' THEN 3 WHEN 'refine' THEN 4 END"
+        )
+        for row in rows:
+            typer.echo(
+                f"  {row['stage']:<12s} {row['episode_count']:>8d} "
+                f"{row['general_complaint_count']:>10d} "
+                f"{row['gave_up_rate']:>7.1%} {row['avg_severity']:>5.1f} "
+                f"{row['evidence_strength']:<12s}"
+            )
+    except Exception:
+        typer.echo("  (could not read funnel_stats)")
 
 
 @app.command()
