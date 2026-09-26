@@ -18,23 +18,27 @@ def _normalize_async_db_url(url: str) -> str:
     if not url:
         return ""
     if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+asyncpg://", 1)
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+    if "?" in url:
+        # asyncpg doesn't support sslmode query param in the URL through SQLAlchemy
+        url = url.split("?")[0]
+        
     return url
 
 
 _database_url = os.environ.get("DATABASE_URL", "")
 _async_url = _normalize_async_db_url(_database_url)
 
-# Disable prepared statement caching for Neon pooled connections
 if _async_url:
     engine = create_async_engine(
         _async_url,
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
-        connect_args={"statement_cache_size": 0},
+        connect_args={"statement_cache_size": 0, "ssl": "require"},
     )
     AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 else:
