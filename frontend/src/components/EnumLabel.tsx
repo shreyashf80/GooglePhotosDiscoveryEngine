@@ -26,7 +26,7 @@ export const labelMap: Record<string, string> = {
   "none": "None"
 }
 
-export function EnumLabel({ value, className }: { value: string, className?: string }) {
+export function EnumLabel({ value, className, customTooltip }: { value: string, className?: string, customTooltip?: React.ReactNode }) {
   if (!value) return null
   const readable = labelMap[value] || value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   return (
@@ -36,7 +36,7 @@ export function EnumLabel({ value, className }: { value: string, className?: str
           <span className={`cursor-help ${className || ''}`}>{readable}</span>
         </TooltipTrigger>
         <TooltipContent>
-          <p className="text-xs">Raw value: {value}</p>
+          {customTooltip || <p className="text-xs">Raw value: {value}</p>}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

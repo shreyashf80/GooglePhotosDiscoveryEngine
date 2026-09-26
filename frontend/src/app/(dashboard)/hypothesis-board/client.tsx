@@ -31,19 +31,28 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
 
   const renderH5Chart = (details: any) => {
     if (!details) return null
+    const failureModes = ['ui_friction', 'zero_results', 'wrong_results', 'ask_photos_failure', 'other_failure']
     const allCues = new Set([...Object.keys(details.memory || {}), ...Object.keys(details.utility || {})])
-    const data = Array.from(allCues).map(cue => ({
-      cue,
-      memory: details.memory?.[cue] || 0,
-      utility: details.utility?.[cue] || 0
-    })).sort((a, b) => (b.memory + b.utility) - (a.memory + a.utility)).slice(0, 5)
+    const data = Array.from(allCues)
+      .filter(cue => !failureModes.includes(cue))
+      .map(cue => ({
+        cue,
+        memory: details.memory?.[cue] || 0,
+        utility: details.utility?.[cue] || 0
+      })).sort((a, b) => (b.memory + b.utility) - (a.memory + a.utility)).slice(0, 5)
 
     return (
       <div className="space-y-2 mt-4">
-        <h4 className="text-sm font-medium">Top Cues: Memory vs Utility</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium">Top Cues: Memory vs Utility</h4>
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-purple-500"></div>Memory</div>
+            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500"></div>Utility</div>
+          </div>
+        </div>
         {data.map(d => (
           <div key={d.cue} className="flex items-center text-xs">
-            <span className="w-32 truncate" title={d.cue}>{d.cue}</span>
+            <span className="w-32 truncate" title={d.cue}><EnumLabel value={d.cue} /></span>
             <div className="flex-1 flex gap-1 h-4">
               <div style={{ width: `${(d.memory / 10) * 100}%` }} className="bg-purple-500 rounded" title={`Memory: ${d.memory}`} />
               <div style={{ width: `${(d.utility / 10) * 100}%` }} className="bg-blue-500 rounded" title={`Utility: ${d.utility}`} />
@@ -66,7 +75,7 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
           const rate = stats.total > 0 ? (stats.imprecision / stats.total) * 100 : 0
           return (
             <div key={b} className="flex items-center text-xs">
-              <span className="w-24">{b}</span>
+              <span className="w-24"><EnumLabel value={b} /></span>
               <div className="flex-1 h-4 bg-gray-100 rounded flex overflow-hidden">
                 <div style={{ width: `${rate}%` }} className="bg-amber-500" title={`Imprecise: ${stats.imprecision}/${stats.total}`} />
               </div>
@@ -113,7 +122,7 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
            {isAnecdotal ? (
              <div className="flex flex-col items-center gap-1 text-sm mb-2 text-gray-500">
                 <div className="w-full h-2 bg-gray-200 rounded" />
-                <span className="italic">Too few episodes to judge</span>
+                <span className="italic">Too few episodes to judge ({hypothesis.support_count} for, {hypothesis.contradict_count} against)</span>
              </div>
            ) : (
              <div className="flex items-center gap-4 text-sm mb-2">
@@ -136,7 +145,7 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
                 <div className="space-y-4">
                   {details.support_evidence?.map((ep: any) => (
                     <div key={ep.episode_id} className="text-sm bg-white p-3 rounded shadow-sm border">
-                      <p className="italic mb-2">"{ep.quote_en}"</p>
+                      <p className="italic mb-2">&quot;{ep.quote_en}&quot;</p>
                       <div className="text-xs text-gray-500 flex justify-between">
                         <span>Rank: {ep.rank} | Conf: {ep.extraction_confidence}</span>
                         <a href={ep.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Source</a>
@@ -151,7 +160,7 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
                 <div className="space-y-4">
                   {details.contradict_evidence?.map((ep: any) => (
                     <div key={ep.episode_id} className="text-sm bg-white p-3 rounded shadow-sm border">
-                      <p className="italic mb-2">"{ep.quote_en}"</p>
+                      <p className="italic mb-2">&quot;{ep.quote_en}&quot;</p>
                       <div className="text-xs text-gray-500 flex justify-between">
                         <span>Rank: {ep.rank} | Conf: {ep.extraction_confidence}</span>
                         <a href={ep.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Source</a>
