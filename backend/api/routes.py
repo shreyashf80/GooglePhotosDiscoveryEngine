@@ -269,12 +269,49 @@ async def list_episodes(
     }
 
 @router.get("/episodes/export")
-async def export_episodes():
-    data = await execute_query("""
+async def export_episodes(
+    archetype: Optional[str] = None,
+    category: Optional[str] = None,
+    origin: Optional[str] = None,
+    outcome: Optional[str] = None,
+    stakes: Optional[str] = None,
+    confidence: Optional[str] = None,
+    search: Optional[str] = None
+):
+    where = []
+    params = {}
+    
+    if archetype:
+        where.append("e.archetype_primary = :archetype")
+        params["archetype"] = archetype
+    if category:
+        where.append("e.photo_category = :category")
+        params["category"] = category
+    if origin:
+        where.append("e.photo_origin = :origin")
+        params["origin"] = origin
+    if outcome:
+        where.append("e.outcome = :outcome")
+        params["outcome"] = outcome
+    if stakes:
+        where.append("e.stakes = :stakes")
+        params["stakes"] = stakes
+    if confidence:
+        where.append("e.extraction_confidence = :confidence")
+        params["confidence"] = confidence
+    if search:
+        where.append("e.summary_en ILIKE :search")
+        params["search"] = f"%{search}%"
+        
+    where_clause = "WHERE " + " AND ".join(where) if where else ""
+
+    data = await execute_query(f"""
         SELECT e.episode_id, e.archetype_primary, e.summary_en, e.quote_en, e.outcome, r.source, r.url
         FROM episodes e
         JOIN raw_records r ON e.record_id = r.record_id
-    """)
+        {where_clause}
+    """, params)
+    
     if not data:
         return Response("No data", media_type="text/plain")
         

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { ReactNode } from 'react'
 
+export const revalidate = 300;
+
 const navItems = [
   { name: 'Overview', href: '/' },
   { name: 'Hypothesis board', href: '/hypothesis-board' },
