@@ -35,7 +35,7 @@ from pipeline.config import (
     require_model_id,
 )
 from pipeline.db import engine
-from pipeline.llm.client import GeminiClient
+from pipeline.llm.client import GeminiClient, ServiceUnavailableError
 from pipeline.llm.key_pool import KeyPool
 from shared.models import RecordExtraction
 
@@ -443,6 +443,9 @@ def run_extract(limit: Optional[int] = None) -> dict:
                             RecordExtraction.model_validate(item)
                             
                     break  # Success
+                except ServiceUnavailableError as e:
+                    logger.error("Stopping stage cleanly due to continuous 503 errors: %s", e)
+                    raise e
                 except Exception as e:
                     last_error = str(e)[:500]
                     logger.warning(
@@ -455,13 +458,14 @@ def run_extract(limit: Optional[int] = None) -> dict:
             if response is None:
                 # All retries failed — mark all records in batch as extract_failed
                 logger.error("Extract batch %d-%d: all retries exhausted", i, i + len(batch))
+                is_transient = "503" in (last_error or "") or "rate limit" in (last_error or "").lower()
                 with engine.begin() as conn:
                     for row in batch:
                         conn.execute(
                             text("""
                                 UPDATE raw_records
                                 SET status = CASE WHEN COALESCE(retry_count, 0) >= 2 THEN 'extract_failed' ELSE 'filtered' END,
-                                    retry_count = COALESCE(retry_count, 0) + 1,
+                                    retry_count = COALESCE(retry_count, 0) + :inc,
                                     last_error = :error,
                                     run_id = :run_id
                                 WHERE record_id = :id
@@ -470,6 +474,7 @@ def run_extract(limit: Optional[int] = None) -> dict:
                                 "id": row.record_id,
                                 "error": last_error or "All extraction attempts failed",
                                 "run_id": run_id,
+                                "inc": 0 if is_transient else 1
                             },
                         )
                         counts["records_failed"] += 1

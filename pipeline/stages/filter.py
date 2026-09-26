@@ -31,7 +31,7 @@ from pipeline.config import (
     require_model_id,
 )
 from pipeline.db import engine
-from pipeline.llm.client import GeminiClient
+from pipeline.llm.client import GeminiClient, ServiceUnavailableError
 from pipeline.llm.key_pool import KeyPool
 from shared.enums import RelevanceClass
 from shared.models import FilterResult
@@ -235,6 +235,8 @@ def run_filter(limit: Optional[int] = None) -> dict:
                             temperature=0.1,
                         )
                         break
+                    except ServiceUnavailableError as err:
+                        raise err
                     except Exception as err:
                         print("FILTER ERROR:", err)
                         last_err = err
@@ -325,21 +327,28 @@ def run_filter(limit: Optional[int] = None) -> dict:
                     i, i + len(batch), len(results_list),
                 )
 
+            except ServiceUnavailableError as e:
+                logger.error("Stopping stage cleanly due to continuous 503 errors: %s", e)
+                break
             except Exception as e:
                 logger.error("Filter batch %d-%d failed: %s", i, i + len(batch), e)
                 counts["llm_errors"] += len(batch)
+                
+                # Check if this was a transient error/timeout where we shouldn't increment retry count
+                is_transient = "503" in str(e) or "rate limit" in str(e).lower()
+                
                 # Mark batch as failed but leave status as is (deduped)
                 with engine.begin() as conn:
                     for r in batch:
                         conn.execute(
                             text("""
                                 UPDATE raw_records
-                                SET retry_count = COALESCE(retry_count, 0) + 1,
+                                SET retry_count = COALESCE(retry_count, 0) + :inc,
                                     last_error = :reason,
                                     run_id = :run_id
                                 WHERE record_id = :id
                             """),
-                            {"id": r["record_id"], "reason": f"llm_error: {str(e)[:200]}", "run_id": run_id},
+                            {"id": r["record_id"], "reason": f"llm_error: {str(e)[:200]}", "run_id": run_id, "inc": 0 if is_transient else 1},
                         )
 
     finally:

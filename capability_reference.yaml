@@ -1,112 +1,80 @@
-# Capability reference seed data (FR-86)
-# PM-curated: for each cue type, whether Google Photos can use it today.
-# searchable: yes | partial | no
-# These are initial values — PM must verify on a real device before M3.
+# capability_reference.yaml
+# What Google Photos search can use today, per cue type.
+# Source: hands-on testing by the PM on her own device and library (September 2026).
+# searchable = overall judgment used for gap scoring: yes | partial | no | not_verified
+# search / ask_photos = raw results from each surface, as recorded by the tester.
+# Caveat: some failures may be partly caused by photos not being backed up to Google Photos.
 
-- cue_type: time_absolute
-  searchable: "yes"
-  note: "Google Photos supports date/month/year search and date filters"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+verified_how: "Hands-on test on the PM's own Android device and Google Photos library, regular search and Ask Photos, one target photo per cue"
+verified_at: "2026-09"
 
-- cue_type: time_season
-  searchable: "partial"
-  note: "Can search by month but not by season name or festival period directly"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+cues:
+  time_absolute:
+    searchable: partial
+    search: partial
+    ask_photos: partial
+    note: "'March 2024' returned only one photo (shoes). Date search works but recall was very low; possible backup gaps."
 
-- cue_type: time_life_stage
-  searchable: "no"
-  note: "No concept of life stages in search"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  time_season:
+    searchable: partial
+    search: partial
+    ask_photos: partial
+    note: "'Diwali' returned festival photos mixed with birthdays (sparklers), weddings and traditional attire. Recognizes the look of a festival, not the occasion itself. Ask Photos narrower (19 vs 68) but also confused Diwali with Dussehra."
 
-- cue_type: time_event_anchor
-  searchable: "no"
-  note: "Cannot search relative to other events"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  time_event_anchor:
+    searchable: partial
+    search: partial
+    ask_photos: partial
+    note: "Tester rated yes: 'after my trip' returned mostly trip photos. Adjusted to partial because results matched the concept 'trip', not the relation 'after'. Photos taken after the trip were not what came back."
 
-- cue_type: place_named
-  searchable: "yes"
-  note: "Location search works for geotagged photos"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  place_named:
+    searchable: yes
+    search: yes
+    ask_photos: yes
+    note: "'Pune' returned 2019 photos correctly. Recent Pune photos missing because they were not backed up."
 
-- cue_type: place_type
-  searchable: "partial"
-  note: "Some place types recognized (beach, restaurant) but not all"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  person_named:
+    searchable: yes
+    search: yes
+    ask_photos: yes
+    note: "Face recognized perfectly, 60+ photos. Requires the person to be labeled in Photos first (setup)."
 
-- cue_type: person_named
-  searchable: "yes"
-  note: "Face recognition with named labels"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  subject_object:
+    searchable: partial
+    search: partial
+    ask_photos: partial
+    note: "Tester rated yes. Adjusted to partial: common objects work ('car' 9 results with one false positive; 'cake' returned birthday photos), but 'medicine' returned nothing despite medicine and prescription photos on the device (possibly not backed up)."
 
-- cue_type: person_relation
-  searchable: "no"
-  note: "Cannot search by relationship (my mom, my manager)"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  text_in_image:
+    searchable: yes
+    search: yes
+    ask_photos: yes
+    note: "Laptop receipt and barcode found; 'sign' returned signs, restaurant and ad boards. Caveat: the receipt had a caption added by the tester, which may have helped."
 
-- cue_type: group_social
-  searchable: "partial"
-  note: "Can search for photos with multiple named people, but not group concepts"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  source_sender:
+    searchable: "no"
+    search: "no"
+    ask_photos: "no"
+    note: "'photo sent by Pooja on WhatsApp': regular search returned nothing. Ask Photos returned photos OF Pooja, not photos sent BY her. It reads the sender as the subject. (Tester recorded Ask Photos as partial; adjusted to no because no sent photos were returned.)"
 
-- cue_type: subject_object
-  searchable: "partial"
-  note: "Object recognition works for common objects but misses many specific items"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  personal_state:
+    searchable: "no"
+    search: "no"
+    ask_photos: "no"
+    note: "'when I was sick' returned nothing on either surface."
 
-- cue_type: scene_activity
-  searchable: "partial"
-  note: "Some activities recognized (hiking, dancing) but coverage is limited"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  purpose_use:
+    searchable: partial
+    search: partial
+    ask_photos: partial
+    note: "'insurance' and 'prescription' returned an offer letter containing the words 'medical allowance'; 'ID card' returned bills and an exam admission card. Matches words in the image, not the purpose of the document."
 
-- cue_type: text_in_image
-  searchable: "yes"
-  note: "OCR search finds text visible in photos"
-  verified_how: "Not yet verified on device"
-  verified_at: null
-
-- cue_type: source_sender
-  searchable: "no"
-  note: "Cannot search by who sent a photo"
-  verified_how: "Not yet verified on device"
-  verified_at: null
-
-- cue_type: conversation_context
-  searchable: "no"
-  note: "No link between photo and the conversation in which it was shared"
-  verified_how: "Not yet verified on device"
-  verified_at: null
-
-- cue_type: personal_state
-  searchable: "no"
-  note: "Cannot search by how the user felt or what was happening in their life"
-  verified_how: "Not yet verified on device"
-  verified_at: null
-
-- cue_type: emotional_tone
-  searchable: "no"
-  note: "Cannot search by emotional association"
-  verified_how: "Not yet verified on device"
-  verified_at: null
-
-- cue_type: purpose_use
-  searchable: "no"
-  note: "Cannot search by why a photo was taken or why it is needed"
-  verified_how: "Not yet verified on device"
-  verified_at: null
-
-- cue_type: adjacency
-  searchable: "no"
-  note: "Cannot search for photos near another photo in time"
-  verified_how: "Not yet verified on device"
-  verified_at: null
+  # Not tested: excluded from gap ranking until verified
+  time_life_stage: {searchable: not_verified}
+  place_type: {searchable: not_verified}
+  person_relation: {searchable: not_verified}
+  group_social: {searchable: not_verified}
+  scene_activity: {searchable: not_verified}
+  conversation_context: {searchable: not_verified}
+  emotional_tone: {searchable: not_verified}
+  adjacency: {searchable: not_verified}

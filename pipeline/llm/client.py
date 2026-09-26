@@ -21,6 +21,10 @@ from pipeline.llm.key_pool import KeyPool
 
 logger = logging.getLogger(__name__)
 
+class ServiceUnavailableError(Exception):
+    """Raised when the API returns 503 continuously for 10 minutes."""
+    pass
+
 def _create_shadow_model(model_cls: Any) -> Any:
     """Recursively create a Pydantic model clone without validation constraints (FR-40)."""
     def _shadow_type(typ: Any) -> Any:
@@ -119,10 +123,12 @@ class GeminiClient:
         from google import genai
         from google.genai import types
 
-        max_attempts = max(self._key_pool.size * 2, 3)
+        start_time = time.time()
         last_exception = None
+        attempt = 0
 
-        for attempt in range(max_attempts):
+        while True:
+            attempt += 1
             key = self._key_pool.acquire()
             key_index = self._key_pool.get_key_index(key)
 
@@ -213,16 +219,15 @@ class GeminiClient:
                 if is_quota_error:
                     self._key_pool.report_error(key)
                     logger.warning(
-                        "Rate limit/quota error: model=%s, key_index=%d, error_type=%s (attempt %d/%d)",
+                        "Rate limit/quota error: model=%s, key_index=%d, error_type=%s (attempt %d)",
                         self._model_id,
                         key_index,
                         error_type,
-                        attempt + 1,
-                        max_attempts,
+                        attempt,
                     )
-                    # Continue to try with remaining keys in pool (FR-51)
-                    if attempt < max_attempts - 1:
-                        continue
+                    if time.time() - start_time > 600:
+                        break
+                    continue
                 else:
                     # Check for transient server / network errors
                     is_transient = (
@@ -234,14 +239,16 @@ class GeminiClient:
                         or "jsondecodeerror" in error_str
                         or getattr(e, "code", None) in (500, 503)
                     )
-                    if is_transient and attempt < max_attempts - 1:
+                    if is_transient:
                         logger.warning(
                             "Transient error: model=%s, key_index=%d, error_type=%s, retrying...",
                             self._model_id,
                             key_index,
                             error_type,
                         )
-                        time.sleep(1.0)
+                        if time.time() - start_time > 600:
+                            raise ServiceUnavailableError("Gemini API consistently unavailable for 10 minutes.") from e
+                        time.sleep(2.0)
                         continue
 
                     logger.error(
@@ -253,8 +260,8 @@ class GeminiClient:
                     )
                     raise RuntimeError(f"Gemini API call failed: {sanitized_msg}") from e
 
-        # If all attempts exhausted
+        # If we broke out of loop (e.g. quota timeout)
         final_msg = self._sanitize_message(str(last_exception)) if last_exception else "All attempts failed"
         raise RuntimeError(
-            f"Gemini API call failed after {max_attempts} attempts: {final_msg}"
+            f"Gemini API call failed after retries: {final_msg}"
         ) from last_exception
