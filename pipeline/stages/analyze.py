@@ -475,16 +475,31 @@ def run_analyze() -> dict:
     try:
         with open("capability_reference.yaml", "r") as yf:
             caps_data = yaml.safe_load(yf)
-            caps = {c["cue_type"]: c for c in caps_data} if isinstance(caps_data, list) else caps_data
+            if isinstance(caps_data, dict) and "cues" in caps_data:
+                caps = caps_data["cues"]
+                global_verified_how = caps_data.get("verified_how", "")
+                global_verified_at = caps_data.get("verified_at", "")
+                if global_verified_at == "2026-09":
+                    global_verified_at = "2026-09-01"
+            else:
+                caps = {c["cue_type"]: c for c in caps_data} if isinstance(caps_data, list) else caps_data
+                global_verified_how = ""
+                global_verified_at = None
     except FileNotFoundError:
         caps = {}
+        global_verified_how = ""
+        global_verified_at = None
 
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM capability_reference"))
         for k, v in caps.items():
+            vh = v.get("verified_how", global_verified_how)
+            va = v.get("verified_at", global_verified_at)
+            if not va:
+                va = now
             conn.execute(text("""INSERT INTO capability_reference (cue_type, searchable, note, verified_how, verified_at)
                                  VALUES (:ct, :s, :n, :vh, :va)"""),
-                         {"ct": k, "s": v.get("searchable", "no"), "n": v.get("note", ""), "vh": v.get("verified_how", ""), "va": now})
+                         {"ct": k, "s": v.get("searchable", "no"), "n": v.get("note", ""), "vh": vh, "va": va})
 
         conn.execute(text("DELETE FROM archetype_stats"))
         for s in arch_stats:
