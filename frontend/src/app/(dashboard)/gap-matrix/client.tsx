@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { EnumLabel } from '@/components/EnumLabel'
 
 export default function GapMatrixClient({ data }: { data: any[] }) {
   const [sortCol, setSortCol] = useState<string>('gap_score')
@@ -33,15 +34,18 @@ export default function GapMatrixClient({ data }: { data: any[] }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Gap Matrix</h1>
+      <div>
+        <h1 className="text-3xl font-bold">Gap Matrix</h1>
+        <p className="text-sm text-gray-500 mt-1">Comparing user recall against search system capability across cue types.</p>
+      </div>
       
       <Card className="bg-blue-50 border-blue-200">
         <CardContent className="pt-6">
           <h3 className="text-sm font-semibold text-blue-900 mb-2 uppercase tracking-wider">Top 5 Gaps (Remembered but not searchable)</h3>
           <div className="flex flex-wrap gap-2">
             {topGaps.map((g, i) => (
-              <span key={g.cue_type} className="px-3 py-1 bg-white border border-blue-200 rounded-full text-sm font-medium text-blue-800">
-                {i + 1}. {g.cue_type} <span className="text-blue-400 ml-1">{(g.gap_score * 100).toFixed(0)}</span>
+              <span key={g.cue_type} className="px-3 py-1 bg-white border border-blue-200 rounded-full text-sm font-medium text-blue-800 flex items-center">
+                {i + 1}. <EnumLabel value={g.cue_type} className="ml-1" /> <span className="text-blue-400 ml-1">gap score {(g.gap_score * 100).toFixed(0)}</span>
               </span>
             ))}
           </div>
@@ -70,29 +74,29 @@ export default function GapMatrixClient({ data }: { data: any[] }) {
                 <TableBody>
                   {sortedData.map(row => (
                     <TableRow key={row.cue_type}>
-                      <TableCell className="font-medium">{row.cue_type}</TableCell>
+                      <TableCell className="font-medium"><EnumLabel value={row.cue_type} /></TableCell>
                       <TableCell>{row.remembered_share ? (row.remembered_share * 100).toFixed(1) + '%' : '-'}</TableCell>
                       <TableCell>
                         <div className="flex h-2 w-full bg-gray-100 rounded overflow-hidden mt-2">
-                          <div style={{width: `${(row.exact || 0) * 100}%`}} className="bg-green-500" title="Exact" />
-                          <div style={{width: `${(row.approx || 0) * 100}%`}} className="bg-yellow-500" title="Approximate" />
-                          <div style={{width: `${(row.vague || 0) * 100}%`}} className="bg-red-500" title="Vague" />
+                          <div style={{width: `${(row.exact || 0) * 100}%`}} className="bg-green-500" title={`Exact: ${Math.round((row.exact || 0) * 100)}%`} />
+                          <div style={{width: `${(row.approx || 0) * 100}%`}} className="bg-yellow-500" title={`Approximate: ${Math.round((row.approx || 0) * 100)}%`} />
+                          <div style={{width: `${(row.vague || 0) * 100}%`}} className="bg-red-500" title={`Vague: ${Math.round((row.vague || 0) * 100)}%`} />
                         </div>
                       </TableCell>
                       <TableCell>{row.failure_rate ? (row.failure_rate * 100).toFixed(1) + '%' : '-'}</TableCell>
                       <TableCell>
                         {!row.searchable ? (
-                          <span className="text-gray-400 text-sm">Not verified</span>
+                          <EnumLabel value="not_verified" className="text-gray-400 text-sm" />
                         ) : (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger>
-                                <div className={`cursor-help px-2 py-1 rounded text-xs font-medium ${
-                                  row.searchable === 'yes' ? 'bg-green-100 text-green-800' :
-                                  row.searchable === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-red-100 text-red-800'
-                                }`}>
-                                  {row.searchable.toUpperCase()}
+                                <div>
+                                  <EnumLabel value={row.searchable} className={`px-2 py-1 rounded text-xs font-medium ${
+                                    row.searchable === 'yes' ? 'bg-green-100 text-green-800' :
+                                    row.searchable === 'partial' ? 'bg-amber-100 text-amber-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`} />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>

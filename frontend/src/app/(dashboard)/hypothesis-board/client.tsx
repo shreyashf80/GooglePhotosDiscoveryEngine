@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { EvidenceBadge, ClickableCount, LoadingState } from '@/components/shared/components'
 import { Progress } from '@/components/ui/progress'
 import { fetchApi } from '@/lib/api'
+import { EnumLabel } from '@/components/EnumLabel'
 
 function HypothesisCard({ hypothesis }: { hypothesis: any }) {
   const [expanded, setExpanded] = useState(false)
@@ -26,6 +27,56 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
 
   const totalVotes = hypothesis.support_count + hypothesis.contradict_count
   const supportPercent = totalVotes > 0 ? (hypothesis.support_count / totalVotes) * 100 : 0
+  const isAnecdotal = hypothesis.evidence_strength === 'anecdotal'
+
+  const renderH5Chart = (details: any) => {
+    if (!details) return null
+    const allCues = new Set([...Object.keys(details.memory || {}), ...Object.keys(details.utility || {})])
+    const data = Array.from(allCues).map(cue => ({
+      cue,
+      memory: details.memory?.[cue] || 0,
+      utility: details.utility?.[cue] || 0
+    })).sort((a, b) => (b.memory + b.utility) - (a.memory + a.utility)).slice(0, 5)
+
+    return (
+      <div className="space-y-2 mt-4">
+        <h4 className="text-sm font-medium">Top Cues: Memory vs Utility</h4>
+        {data.map(d => (
+          <div key={d.cue} className="flex items-center text-xs">
+            <span className="w-32 truncate" title={d.cue}>{d.cue}</span>
+            <div className="flex-1 flex gap-1 h-4">
+              <div style={{ width: `${(d.memory / 10) * 100}%` }} className="bg-purple-500 rounded" title={`Memory: ${d.memory}`} />
+              <div style={{ width: `${(d.utility / 10) * 100}%` }} className="bg-blue-500 rounded" title={`Utility: ${d.utility}`} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const renderH6Chart = (details: any) => {
+    if (!details) return null
+    const buckets = ['under_6m', '6m_1y', '1_3y', '3y_plus']
+    return (
+      <div className="space-y-2 mt-4">
+        <h4 className="text-sm font-medium">Date Imprecision by Photo Age</h4>
+        {buckets.map(b => {
+          const stats = details[b]
+          if (!stats) return null
+          const rate = stats.total > 0 ? (stats.imprecision / stats.total) * 100 : 0
+          return (
+            <div key={b} className="flex items-center text-xs">
+              <span className="w-24">{b}</span>
+              <div className="flex-1 h-4 bg-gray-100 rounded flex overflow-hidden">
+                <div style={{ width: `${rate}%` }} className="bg-amber-500" title={`Imprecise: ${stats.imprecision}/${stats.total}`} />
+              </div>
+              <span className="w-12 text-right">{rate.toFixed(0)}%</span>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <Card className="mb-4">
@@ -34,10 +85,12 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <CardTitle className="text-lg">{hypothesis.hypothesis_id}: {hypothesis.title}</CardTitle>
-              <EvidenceBadge strength={hypothesis.evidence_strength || 'anecdotal'} />
-              <span className="text-sm font-medium px-2 py-1 bg-gray-100 rounded text-gray-700 capitalize">
-                {hypothesis.status}
-              </span>
+              <EnumLabel value={hypothesis.status} className={`text-sm font-medium px-2 py-1 rounded capitalize ${
+                  hypothesis.status === 'supported' ? 'bg-green-100 text-green-800' :
+                  hypothesis.status === 'contradicted' ? 'bg-red-100 text-red-800' :
+                  hypothesis.status === 'mixed' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-gray-100 text-gray-800'
+                }`} />
             </div>
             <p className="text-sm text-gray-600">{hypothesis.statement}</p>
           </div>
@@ -47,20 +100,28 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
         </div>
       </CardHeader>
       
-      {(hypothesis.hypothesis_id === 'H5' || hypothesis.hypothesis_id === 'H6') && hypothesis.details ? (
+      {hypothesis.hypothesis_id === 'H5' ? (
         <CardContent className="border-t pt-4">
-          <p className="text-sm italic text-gray-500 mb-2">Distribution Chart Placeholders</p>
-          <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto">
-            {JSON.stringify(hypothesis.details, null, 2)}
-          </pre>
+          {renderH5Chart(hypothesis.details)}
+        </CardContent>
+      ) : hypothesis.hypothesis_id === 'H6' ? (
+        <CardContent className="border-t pt-4">
+          {renderH6Chart(hypothesis.details)}
         </CardContent>
       ) : (
         <CardContent className="border-t pt-4">
-           <div className="flex items-center gap-4 text-sm mb-2">
-              <span className="text-green-700 font-medium">Support: {hypothesis.support_count}</span>
-              <Progress value={supportPercent} className="h-2 flex-1" />
-              <span className="text-red-700 font-medium">Contradict: {hypothesis.contradict_count}</span>
-           </div>
+           {isAnecdotal ? (
+             <div className="flex flex-col items-center gap-1 text-sm mb-2 text-gray-500">
+                <div className="w-full h-2 bg-gray-200 rounded" />
+                <span className="italic">Too few episodes to judge</span>
+             </div>
+           ) : (
+             <div className="flex items-center gap-4 text-sm mb-2">
+                <span className="text-green-700 font-medium">Support: {hypothesis.support_count}</span>
+                <Progress value={supportPercent} className="h-2 flex-1 [&>div]:bg-green-500 bg-red-100" />
+                <span className="text-red-700 font-medium">Contradict: {hypothesis.contradict_count}</span>
+             </div>
+           )}
         </CardContent>
       )}
 
@@ -122,7 +183,10 @@ export default function HypothesisBoardClient({ hypotheses, emergent }: { hypoth
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-end">
-        <h1 className="text-3xl font-bold">Hypothesis Board</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Hypothesis Board</h1>
+          <p className="text-sm text-gray-500 mt-1">Status of our initial assumptions evaluated against real user episodes.</p>
+        </div>
         <div className="space-x-2">
           <span className="text-sm text-gray-500">Sort by:</span>
           <select 

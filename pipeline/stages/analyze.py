@@ -351,7 +351,16 @@ def _compute_hypotheses(episodes, cues_by_episode, queries_by_episode):
         "H8": "Silent abandonment"
     }
 
-    statements = {k: "Statement for " + k for k in titles.keys()}
+    statements = {
+        "H1": "Relational anchoring: users remember photos relative to other life events more than by dates, and search can't use event anchors.",
+        "H2": "Provenance amnesia: photos received from others are the hardest to find because users remember the sender or conversation, which search doesn't index.",
+        "H3": "Vocabulary mismatch: users describe photos by meaning or purpose while the index uses visual labels.",
+        "H4": "Needle in a flood: for recurring subjects, recall works but ranking fails and users scroll through near-duplicates.",
+        "H5": "Utility photos are a distinct segment: screenshots, receipts, documents and medicines are remembered by task and text, not visuals.",
+        "H6": "Time drift grows with age: date memory gets less precise for older photos while date filters assume precision.",
+        "H7": "Refinement dead end: users try a few queries, cannot narrow results, and fall back to scrolling.",
+        "H8": "Silent abandonment: after repeated failures, users stop using search and rely on scrolling or asking others to resend."
+    }
     
     for hid, data in hyps.items():
         support_cnt = len(data["support"])
