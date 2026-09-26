@@ -24,7 +24,7 @@ class YouTubeSource(SourceBase):
         youtube = build('youtube', 'v3', developerKey=self.api_key)
         
         # Search for videos
-        queries = ["google photos search", "ask photos google", "find old photos google photos"]
+        queries = ["Google Photos search", "Ask Photos"]
         all_records = []
         
         for q in queries:
@@ -37,7 +37,7 @@ class YouTubeSource(SourceBase):
                     q=q,
                     type="video",
                     publishedAfter=since.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    maxResults=50
+                    maxResults=4
                 )
                 response = request.execute()
                 video_ids = [item["id"]["videoId"] for item in response.get("items", [])]

@@ -17,34 +17,42 @@ class RedditSource(SourceBase):
     
     def fetch(self, since: datetime, cap: int) -> list[RawRecord]:
         logger.info(f"Fetching Reddit records since {since}, cap {cap}")
-        search_terms = [
-            "google photos can't find photo",
-            "google photos search not finding",
-            "find old photo google photos",
-            "ask photos",
-            "google photos search kaam nahi kar raha",
-            "google photos purani photo kaise dhunde",
-            "google photos not searching correctly"
-        ]
+        import yaml
+        from pathlib import Path
+        config_path = Path(__file__).resolve().parent.parent.parent / "reddit_search_config.yaml"
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+            
+        reddit_wide_terms = config.get("reddit_wide_terms", [])
+        community_searches = config.get("community_searches", {})
+        tournament = config.get("tournament", {})
         
-        communities = ["r/googlephotos", ""]
+        searches = []
+        for term in reddit_wide_terms:
+            searches.append((term, ""))
+        for community, terms in community_searches.items():
+            for term in terms:
+                searches.append((term, community))
+                
         records = []
         
-        for community in communities:
-            if len(records) >= cap:
-                break
-                
+        # Use ThreadPoolExecutor to run Apify searches in parallel to save time
+        import concurrent.futures
+        
+        def fetch_for_search(term, community):
+            max_posts = 30 if community else 20
             run_input = {
-                "searchTerms": search_terms,
+                "searchTerms": [term],
                 "withinCommunity": community,
-                "searchPosts": True,
-                "searchComments": True,
-                "searchSort": "new",
+                "searchPosts": tournament.get("searchPosts", True),
+                "searchComments": tournament.get("searchComments", False),
+                "searchSort": tournament.get("searchSort", "relevance"),
                 "postedAfter": since.strftime("%Y-%m-%d"),
-                "maxPostsCount": max(1, cap // 2),
-                "maxCommentsCount": max(1, cap // 2)
+                "maxPostsCount": max_posts,
+                "maxCommentsCount": 0 if not tournament.get("searchComments", False) else tournament.get("maxCommentsCount", 3)
             }
             
+            local_records = []
             try:
                 run = self.client.actor("harshmaur/reddit-scraper").call(run_input=run_input)
                 dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "defaultDatasetId", None) or getattr(run, "default_dataset_id", None)
@@ -53,12 +61,10 @@ class RedditSource(SourceBase):
                     dt_str = item.get("createdAt") or item.get("commentCreatedAt")
                     if dt_str:
                         try:
-                            # Append UTC timezone if not present, and handle 'Z'
                             if dt_str.endswith('Z'):
                                 dt_str = dt_str.replace("Z", "+00:00")
                             dt = datetime.fromisoformat(dt_str)
                             if dt.tzinfo is None:
-                                # Assume UTC if naive
                                 from datetime import timezone
                                 dt = dt.replace(tzinfo=timezone.utc)
                                 
@@ -92,7 +98,7 @@ class RedditSource(SourceBase):
                     
                     record_id = f"rd_{parsed_id}" if parsed_id else f"rd_{uuid.uuid4().hex[:12]}"
                     
-                    records.append(RawRecord(
+                    local_records.append(RawRecord(
                         record_id=record_id,
                         source=Source.REDDIT,
                         item_type=item_type,
@@ -101,15 +107,28 @@ class RedditSource(SourceBase):
                         author_hash=hash_author(author),
                         created_at=dt,
                         text=text,
-                        extra={"subreddit": subreddit}
+                        extra={"subreddit": subreddit, "search_term": term, "community_search": community}
                     ))
-                    
-                    if len(records) >= cap:
-                        break
-                    
             except Exception as e:
-                logger.error(f"Error fetching Reddit for community '{community}': {e}")
-                self.errors.append(f"Error fetching Reddit for community '{community}': {e}")
+                err_msg = f"Error fetching Reddit for term '{term}' in '{community}': {e}"
+                logger.error(err_msg)
+                return local_records, err_msg
+            return local_records, None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_search = {executor.submit(fetch_for_search, t, c): (t, c) for t, c in searches}
+            for future in concurrent.futures.as_completed(future_to_search):
+                t, c = future_to_search[future]
+                try:
+                    res, err = future.result()
+                    if err:
+                        self.errors.append(err)
+                    records.extend(res)
+                except Exception as exc:
+                    self.errors.append(f"Search {t} in {c} generated an exception: {exc}")
                 
+                if len(records) >= cap:
+                    break
+        
         records.sort(key=lambda x: x.created_at, reverse=True)
         return records[:cap]
