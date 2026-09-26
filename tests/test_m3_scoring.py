@@ -127,9 +127,9 @@ class TestGapScore:
 class TestFunnelRules:
     """Test the funnel stage classification logic from analyze.py."""
 
-    def test_express_no_queries(self):
+    def test_express_didnt_know(self):
         from pipeline.stages.analyze import _episode_hits_express
-        ep = {"has_forgotten_cues": False}
+        ep = {"has_forgotten_cues": False, "summary_en": "They didn't know what to search for."}
         assert _episode_hits_express(ep, cues=[], queries=[]) is True
 
     def test_express_all_vague_cues(self):

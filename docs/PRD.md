@@ -318,7 +318,7 @@ All analysis runs in the `analyze` command and writes materialized results. Reco
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-88 | Map episode failures to the retrieval stage where the process broke. Stages: **Express** (vague-only cues, explicit `cues_forgotten`, or no queries tried), **Understand** (`zero_results`, `wrong_results`, `vocabulary_mismatch`, `cue_not_supported`, `ask_photos_failure`), **Evaluate** (`too_many_results` or `timeline_scroll` workaround), **Refine** (`refinement_missing` or 3+ queries tried). An episode can hit multiple stages. Store per stage: episode count, general complaint count (from `general_failure_modes`), gave-up rate, avg severity, evidence strength. Materialized in `funnel_stats` table, computed by the `analyze` command. | P0 |
+| FR-88 | Map episode failures to the retrieval stage where the process broke. Stages: **Express** (vague-only cues, explicit `cues_forgotten`, or the user stating they didn't know what to search), **Understand** (`zero_results`, `wrong_results`, `vocabulary_mismatch`, `cue_not_supported`, `ask_photos_failure`), **Evaluate** (`too_many_results` or `timeline_scroll` workaround), **Refine** (`refinement_missing` or 3+ queries tried). An episode can hit multiple stages. Store per stage: episode count, general complaint count (from `general_failure_modes`), gave-up rate, avg severity, evidence strength. Materialized in `funnel_stats` table, computed by the `analyze` command. | P0 |
 
 ### 10.5 Gap matrix
 
