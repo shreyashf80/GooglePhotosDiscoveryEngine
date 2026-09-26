@@ -10,10 +10,12 @@ export async function fetchApi<T>(path: string, options: RequestInit = {}): Prom
   headers.set('X-API-Key', BACKEND_API_KEY);
   headers.set('Content-Type', 'application/json');
 
+  const isEpisodeRoute = path.startsWith('/episodes');
   const res = await fetch(url.toString(), {
     ...options,
     headers,
-    cache: 'no-store' // We always want fresh data for this PM tool
+    cache: isEpisodeRoute ? 'no-store' : undefined,
+    next: isEpisodeRoute ? undefined : { revalidate: 300 }
   });
 
   if (!res.ok) {

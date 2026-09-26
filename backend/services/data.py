@@ -6,6 +6,8 @@ from typing import Any, List, Dict
 from backend.db import engine
 
 async def execute_query(query: str, params: dict = None) -> List[Dict[str, Any]]:
+    from backend.main import query_count
+    query_count.set(query_count.get() + 1)
     if not engine:
         return []
     async with engine.begin() as conn:

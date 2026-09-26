@@ -1,15 +1,25 @@
 import os
 import logging
+import time
+from contextvars import ContextVar
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, Security
+from fastapi import FastAPI, Depends, HTTPException, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastembed import TextEmbedding
+from sqlalchemy import event
 
 from backend.db import engine, _async_url
 from backend.api import routes
 
 logger = logging.getLogger(__name__)
+
+query_count: ContextVar[int] = ContextVar("query_count", default=0)
+
+if engine:
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def receive_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        query_count.set(query_count.get() + 1)
 
 # Global model instance
 embedding_model = None
@@ -29,6 +39,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    query_count.set(0)
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    logger.warning(f"MEASURE: Route {request.url.path} took {process_time:.4f}s and ran {query_count.get()} SQL queries")
+    response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-SQL-Queries"] = str(query_count.get())
+    return response
 
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "http://localhost:3000")
 app.add_middleware(
