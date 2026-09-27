@@ -40,11 +40,8 @@ def run_embed() -> dict:
             "SELECT episode_id, summary_en FROM episodes WHERE embedding IS NULL"
         )).fetchall()
 
-    if not rows:
-        logger.info("Embed: no episodes to embed")
-        return {"processed": 0}
-
-    logger.info(f"Embed: {len(rows)} episodes to embed")
+    if rows:
+        logger.info(f"Embed: {len(rows)} episodes to embed")
     processed = 0
 
     for i in range(0, len(rows), EMBED_BATCH_SIZE):
@@ -64,7 +61,51 @@ def run_embed() -> dict:
                 )
 
         processed += len(batch)
-        logger.info(f"Embed batch {i}-{i + len(batch)}: {len(batch)} embedded")
+        logger.info(f"Embed episodes batch {i}-{i + len(batch)}: {len(batch)} embedded")
+
+    # Embed Signals
+    with engine.begin() as conn:
+        rows = conn.execute(text(
+            "SELECT signal_id, summary_en FROM signals WHERE embedding IS NULL"
+        )).fetchall()
+        
+    if rows:
+        for i in range(0, len(rows), EMBED_BATCH_SIZE):
+            batch = rows[i:i + EMBED_BATCH_SIZE]
+            texts = [r.summary_en for r in batch]
+            ids = [r.signal_id for r in batch]
+
+            embeddings = list(model.embed(texts))
+            with engine.begin() as conn:
+                for eid, emb in zip(ids, embeddings):
+                    vec_str = "[" + ",".join(str(float(v)) for v in emb) + "]"
+                    conn.execute(
+                        text("UPDATE signals SET embedding = :vec WHERE signal_id = :eid"),
+                        {"vec": vec_str, "eid": eid},
+                    )
+            processed += len(batch)
+            
+    # Embed Signal Reasons
+    with engine.begin() as conn:
+        rows = conn.execute(text(
+            "SELECT id, text FROM signal_reasons WHERE embedding IS NULL"
+        )).fetchall()
+        
+    if rows:
+        for i in range(0, len(rows), EMBED_BATCH_SIZE):
+            batch = rows[i:i + EMBED_BATCH_SIZE]
+            texts = [r.text for r in batch]
+            ids = [r.id for r in batch]
+
+            embeddings = list(model.embed(texts))
+            with engine.begin() as conn:
+                for eid, emb in zip(ids, embeddings):
+                    vec_str = "[" + ",".join(str(float(v)) for v in emb) + "]"
+                    conn.execute(
+                        text("UPDATE signal_reasons SET embedding = :vec WHERE id = :eid"),
+                        {"vec": vec_str, "eid": eid},
+                    )
+            processed += len(batch)
 
     # Update status to 'embedded' for records whose episodes are now all embedded
     with engine.begin() as conn:
@@ -99,6 +140,29 @@ def run_embed() -> dict:
                   )
                   AND (e1.embedding <=> e2.embedding) < 0.08
                   AND (r1.created_at > r2.created_at OR (r1.created_at = r2.created_at AND e1.episode_id > e2.episode_id))
+            )
+        """))
+
+        # Cross-record duplicates for signals (same thread summary cosine > 0.92)
+        conn.execute(text("""
+            UPDATE signals s1
+            SET is_duplicate = TRUE
+            FROM raw_records r1
+            WHERE s1.record_id = r1.record_id
+              AND EXISTS (
+                SELECT 1 FROM signals s2
+                JOIN raw_records r2 ON s2.record_id = r2.record_id
+                WHERE s1.signal_id != s2.signal_id
+                  AND s1.embedding IS NOT NULL AND s2.embedding IS NOT NULL
+                  AND (
+                      (r1.author_hash = r2.author_hash AND r1.author_hash IS NOT NULL)
+                      OR
+                      (r1.source = 'reddit' AND r2.source = 'reddit' 
+                       AND substring(r1.url from 'comments/([^/]+)') = substring(r2.url from 'comments/([^/]+)') 
+                       AND substring(r1.url from 'comments/([^/]+)') IS NOT NULL
+                       AND (s1.embedding <=> s2.embedding) < 0.08)
+                  )
+                  AND (r1.created_at > r2.created_at OR (r1.created_at = r2.created_at AND s1.signal_id > s2.signal_id))
             )
         """))
 

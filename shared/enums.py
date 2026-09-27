@@ -11,12 +11,12 @@ Sections referenced:
   - extraction_spec.md Section 5 / PRD FR-70, FR-74 (EvidenceStrength, HypothesisStatus)
 """
 
-from enum import StrEnum
+from enum import Enum
 
 
 # --- Section 1: Relevance classification ---
 
-class RelevanceClass(StrEnum):
+class RelevanceClass(str, Enum):
     SPECIFIC_EPISODE = "specific_episode"
     GENERAL_SEARCH_COMPLAINT = "general_search_complaint"
     SUCCESS_OR_TIP = "success_or_tip"
@@ -28,7 +28,7 @@ class RelevanceClass(StrEnum):
 
 # --- Section 3.1: Photo category ---
 
-class PhotoCategory(StrEnum):
+class PhotoCategory(str, Enum):
     PEOPLE_MOMENT = "people_moment"
     EVENT_OCCASION = "event_occasion"
     TRAVEL_PLACE = "travel_place"
@@ -64,7 +64,7 @@ UTILITY_CATEGORIES = frozenset({
 
 # --- Section 3.2: Photo origin ---
 
-class PhotoOrigin(StrEnum):
+class PhotoOrigin(str, Enum):
     OWN_CAMERA = "own_camera"
     RECEIVED_MESSAGING = "received_messaging"
     SHARED_ALBUM_OR_PARTNER = "shared_album_or_partner"
@@ -77,7 +77,7 @@ class PhotoOrigin(StrEnum):
 
 # --- Section 2.2: Photo age bucket ---
 
-class PhotoAgeBucket(StrEnum):
+class PhotoAgeBucket(str, Enum):
     UNDER_6M = "under_6m"
     SIX_12M = "6_12m"
     ONE_3Y = "1_3y"
@@ -87,7 +87,7 @@ class PhotoAgeBucket(StrEnum):
 
 # --- Section 3.3: Cue type ---
 
-class CueType(StrEnum):
+class CueType(str, Enum):
     TIME_ABSOLUTE = "time_absolute"
     TIME_SEASON = "time_season"
     TIME_LIFE_STAGE = "time_life_stage"
@@ -110,7 +110,7 @@ class CueType(StrEnum):
 
 # --- Section 3.3: Precision ---
 
-class Precision(StrEnum):
+class Precision(str, Enum):
     EXACT = "exact"
     APPROXIMATE = "approximate"
     VAGUE = "vague"
@@ -118,7 +118,7 @@ class Precision(StrEnum):
 
 # --- Section 3.4: Query style ---
 
-class QueryStyle(StrEnum):
+class QueryStyle(str, Enum):
     KEYWORD_OBJECT = "keyword_object"
     KEYWORD_PERSON = "keyword_person"
     KEYWORD_PLACE = "keyword_place"
@@ -133,7 +133,7 @@ class QueryStyle(StrEnum):
 
 # --- Section 3.5: Failure mode ---
 
-class FailureMode(StrEnum):
+class FailureMode(str, Enum):
     ZERO_RESULTS = "zero_results"
     WRONG_RESULTS = "wrong_results"
     TOO_MANY_RESULTS = "too_many_results"
@@ -148,7 +148,7 @@ class FailureMode(StrEnum):
 
 # --- Section 3.6: Workaround ---
 
-class Workaround(StrEnum):
+class Workaround(str, Enum):
     TIMELINE_SCROLL = "timeline_scroll"
     DATE_JUMP = "date_jump"
     ALBUM_OR_FOLDER_BROWSE = "album_or_folder_browse"
@@ -163,7 +163,7 @@ class Workaround(StrEnum):
 
 # --- Section 2.2: Outcome ---
 
-class Outcome(StrEnum):
+class Outcome(str, Enum):
     FOUND_EASILY = "found_easily"
     FOUND_WITH_EFFORT = "found_with_effort"
     GAVE_UP = "gave_up"
@@ -173,7 +173,7 @@ class Outcome(StrEnum):
 
 # --- V2 Behavior Fields ---
 
-class Trigger(StrEnum):
+class Trigger(str, Enum):
     SHARE_WITH_SOMEONE = "share_with_someone"
     DOCUMENT_OR_FORM = "document_or_form"
     PROOF_OR_RECORD = "proof_or_record"
@@ -184,7 +184,7 @@ class Trigger(StrEnum):
     UNKNOWN = "unknown"
 
 
-class Expectation(StrEnum):
+class Expectation(str, Enum):
     UNDERSTAND_DESCRIPTION = "understand_description"
     FILTER_BY_DATE_OR_PLACE = "filter_by_date_or_place"
     AI_SHOULD_FIND_IT = "ai_should_find_it"
@@ -193,7 +193,7 @@ class Expectation(StrEnum):
     UNKNOWN = "unknown"
 
 
-class MentalModel(StrEnum):
+class MentalModel(str, Enum):
     BY_DATE_TIMELINE = "by_date_timeline"
     BY_ALBUM_OR_FOLDER = "by_album_or_folder"
     BY_SOURCE_APP = "by_source_app"
@@ -202,7 +202,7 @@ class MentalModel(StrEnum):
     UNKNOWN = "unknown"
 
 
-class OrganizingHabit(StrEnum):
+class OrganizingHabit(str, Enum):
     USES_ALBUMS = "uses_albums"
     USES_FAVORITES_OR_CAPTIONS = "uses_favorites_or_captions"
     LABELS_FACES = "labels_faces"
@@ -210,13 +210,13 @@ class OrganizingHabit(StrEnum):
     UNKNOWN = "unknown"
 
 
-class Frequency(StrEnum):
+class Frequency(str, Enum):
     ONE_OFF = "one_off"
     RECURRING = "recurring"
     UNKNOWN = "unknown"
 
 
-class EmotionalCost(StrEnum):
+class EmotionalCost(str, Enum):
     FRUSTRATED = "frustrated"
     ANXIOUS_OR_PANICKED = "anxious_or_panicked"
     RESIGNED = "resigned"
@@ -227,7 +227,7 @@ class EmotionalCost(StrEnum):
 
 # --- Section 2.2: Stakes ---
 
-class Stakes(StrEnum):
+class Stakes(str, Enum):
     SENTIMENTAL = "sentimental"
     PRACTICAL_ROUTINE = "practical_routine"
     PRACTICAL_URGENT = "practical_urgent"
@@ -236,7 +236,7 @@ class Stakes(StrEnum):
 
 # --- Section 4: Archetype ---
 
-class Archetype(StrEnum):
+class Archetype(str, Enum):
     NEEDLE_IN_FLOOD = "needle_in_flood"
     VOCABULARY_MISMATCH = "vocabulary_mismatch"
     PROVENANCE_LOST = "provenance_lost"
@@ -249,7 +249,7 @@ class Archetype(StrEnum):
 
 # --- Section 2.2: Extraction confidence ---
 
-class ExtractionConfidence(StrEnum):
+class ExtractionConfidence(str, Enum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -257,7 +257,7 @@ class ExtractionConfidence(StrEnum):
 
 # --- PRD FR-70: Evidence strength ---
 
-class EvidenceStrength(StrEnum):
+class EvidenceStrength(str, Enum):
     STRONG = "strong"
     DIRECTIONAL = "directional"
     ANECDOTAL = "anecdotal"
@@ -265,7 +265,7 @@ class EvidenceStrength(StrEnum):
 
 # --- PRD FR-74: Hypothesis status ---
 
-class HypothesisStatus(StrEnum):
+class HypothesisStatus(str, Enum):
     SUPPORTED = "supported"
     CONTRADICTED = "contradicted"
     MIXED = "mixed"
@@ -274,7 +274,7 @@ class HypothesisStatus(StrEnum):
 
 # --- Section 2.1: Product ---
 
-class Product(StrEnum):
+class Product(str, Enum):
     GOOGLE_PHOTOS = "google_photos"
     APPLE_PHOTOS = "apple_photos"
     SAMSUNG_GALLERY = "samsung_gallery"
@@ -283,7 +283,7 @@ class Product(StrEnum):
 
 # --- Section 2.1: Platform ---
 
-class Platform(StrEnum):
+class Platform(str, Enum):
     ANDROID = "android"
     IOS = "ios"
     WEB = "web"
@@ -292,7 +292,7 @@ class Platform(StrEnum):
 
 # --- Record status (architecture.md Section 3.2) ---
 
-class RecordStatus(StrEnum):
+class RecordStatus(str, Enum):
     RAW = "raw"
     DEDUPED = "deduped"
     FILTERED = "filtered"
@@ -304,7 +304,7 @@ class RecordStatus(StrEnum):
 
 # --- Source names ---
 
-class Source(StrEnum):
+class Source(str, Enum):
     REDDIT = "reddit"
     PLAYSTORE = "playstore"
     APPSTORE = "appstore"
@@ -316,7 +316,7 @@ class Source(StrEnum):
 
 # --- Item type ---
 
-class ItemType(StrEnum):
+class ItemType(str, Enum):
     POST = "post"
     COMMENT = "comment"
     REVIEW = "review"
@@ -324,7 +324,7 @@ class ItemType(StrEnum):
 
 # --- Capability reference searchable ---
 
-class Searchable(StrEnum):
+class Searchable(str, Enum):
     YES = "yes"
     PARTIAL = "partial"
     NO = "no"
@@ -332,7 +332,7 @@ class Searchable(StrEnum):
 
 # --- Role hints ---
 
-class RoleHint(StrEnum):
+class RoleHint(str, Enum):
     PARENT = "parent"
     TRAVELER = "traveler"
     STUDENT = "student"

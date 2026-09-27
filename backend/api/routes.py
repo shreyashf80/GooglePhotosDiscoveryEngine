@@ -29,26 +29,6 @@ async def clear_cache_endpoint():
     clear_cache()
     return {"status": "cleared"}
 
-def build_filter_where(source, product, lang, from_date, to_date, prefix="e"):
-    conditions = []
-    params = {}
-    if source:
-        conditions.append(f"{prefix}.source = :source")
-        params["source"] = source
-    if product:
-        conditions.append(f"{prefix}.product = :product")
-        params["product"] = product
-    if lang:
-        conditions.append(f"{prefix}.lang = :lang")
-        params["lang"] = lang
-    if from_date:
-        conditions.append(f"{prefix}.created_at >= :from_date")
-        params["from_date"] = from_date
-    if to_date:
-        conditions.append(f"{prefix}.created_at <= :to_date")
-        params["to_date"] = to_date
-    return (" AND ".join(conditions), params) if conditions else ("", {})
-
 @router.get("/overview")
 async def get_overview():
     cached = get_cached("overview")
@@ -57,9 +37,8 @@ async def get_overview():
     kpis_query = """
         SELECT 
             (SELECT count(*) FROM raw_records) as total_records,
-            (SELECT count(*) FROM raw_records WHERE relevance_class IN ('specific_episode', 'success_or_tip')) as relevant_records,
-            (SELECT count(*) FROM episodes) as total_episodes,
-            (SELECT count(*) FROM raw_records WHERE relevance_class = 'success_or_tip') as success_tip_records,
+            (SELECT count(*) FROM raw_records WHERE scope IN ('core', 'adjacent')) as relevant_records,
+            (SELECT count(*) FROM signals) as total_signals,
             (SELECT count(DISTINCT source) FROM raw_records) as sources_active,
             (SELECT min(created_at) FROM raw_records) as date_min,
             (SELECT max(created_at) FROM raw_records) as date_max
@@ -68,27 +47,31 @@ async def get_overview():
     (
         kpis, 
         funnel_raw, funnel_deduped, funnel_keyword,
-        source_bd, lang_bd, rel_bd, prod_bd, suff, failed, storage
+        source_bd, lang_bd, class_bd, prod_bd, storage
     ) = await asyncio.gather(
         fetch_one(kpis_query),
         fetch_one("SELECT count(*) as c FROM raw_records"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE status != 'raw'"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE keyword_hit = true"),
-        execute_query("SELECT source, count(*) as count FROM raw_records GROUP BY source"),
-        execute_query("SELECT lang, count(*) as count FROM raw_records GROUP BY lang"),
-        execute_query("SELECT relevance_class, count(*) as count FROM raw_records GROUP BY relevance_class"),
-        execute_query("SELECT product, count(*) as count FROM raw_records GROUP BY product"),
-        execute_query("SELECT evidence_strength, count(*) as count FROM hypotheses GROUP BY evidence_strength"),
-        fetch_one("SELECT count(*) as c FROM raw_records WHERE status = 'extract_failed'"),
+        execute_query("SELECT source, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY source"),
+        execute_query("SELECT lang, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY lang"),
+        execute_query("SELECT relevance_class, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY relevance_class"),
+        execute_query("SELECT product, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY product"),
         fetch_one("SELECT pg_database_size(current_database()) as size")
     )
     
+    # Top Themes
+    top_themes = await execute_query("SELECT * FROM themes ORDER BY rank_score DESC LIMIT 5")
+    
+    # Funnel by scope
+    funnel_stats = await execute_query("SELECT * FROM funnel_stats")
+
     funnel = {
         "raw": funnel_raw["c"] if funnel_raw else 0,
         "deduped": funnel_deduped["c"] if funnel_deduped else 0,
         "keyword_pass": funnel_keyword["c"] if funnel_keyword else 0,
         "llm_relevant": kpis["relevant_records"] if kpis else 0,
-        "extracted_episodes": kpis["total_episodes"] if kpis else 0,
+        "extracted_signals": kpis["total_signals"] if kpis else 0,
     }
     
     result = {
@@ -97,23 +80,52 @@ async def get_overview():
         "breakdowns": {
             "source": source_bd,
             "language": lang_bd,
-            "relevance": rel_bd,
+            "relevance": class_bd,
             "product": prod_bd,
         },
-        "sufficiency": suff,
+        "top_themes": top_themes,
+        "funnel_stats": funnel_stats,
         "pipeline_health": {
-            "failed_records": failed["c"] if failed else 0,
             "storage_bytes": storage["size"] if storage else 0
         }
     }
     set_cached("overview", result)
     return result
 
+@router.get("/themes")
+async def list_themes(scope: Optional[str] = None):
+    cached = get_cached(f"themes_{scope}")
+    if cached: return cached
+    
+    query = "SELECT * FROM themes"
+    params = {}
+    if scope:
+        query += " WHERE scope = :scope"
+        params["scope"] = scope
+    query += " ORDER BY rank_score DESC"
+    
+    res = await execute_query(query, params)
+    set_cached(f"themes_{scope}", res)
+    return res
+
+@router.get("/themes/{id}")
+async def get_theme(id: str):
+    cached = get_cached(f"theme_{id}")
+    if cached: return cached
+    
+    theme = await fetch_one("SELECT * FROM themes WHERE id = :id", {"id": id})
+    if not theme:
+        return {"error": "Not found"}
+        
+    res = {"theme": theme}
+    set_cached(f"theme_{id}", res)
+    return res
+
 @router.get("/hypotheses")
 async def list_hypotheses():
     cached = get_cached("hypotheses")
     if cached: return cached
-    res = await execute_query("SELECT * FROM hypotheses ORDER BY hypothesis_id")
+    res = await execute_query("SELECT * FROM hypotheses WHERE origin = 'data_derived' ORDER BY rank DESC")
     set_cached("hypotheses", res)
     return res
 
@@ -122,22 +134,8 @@ async def get_hypothesis(id: str):
     cached = get_cached(f"hypotheses_{id}")
     if cached: return cached
     
-    hyp, support_eps, contradict_eps, lit_sources = await asyncio.gather(
+    hyp, lit_sources = await asyncio.gather(
         fetch_one("SELECT * FROM hypotheses WHERE hypothesis_id = :id", {"id": id}),
-        execute_query("""
-            SELECT e.*, he.rank 
-            FROM hypothesis_evidence he
-            JOIN episodes e ON he.episode_id = e.episode_id
-            WHERE he.hypothesis_id = :id AND he.direction = 'support'
-            ORDER BY he.rank
-        """, {"id": id}),
-        execute_query("""
-            SELECT e.*, he.rank 
-            FROM hypothesis_evidence he
-            JOIN episodes e ON he.episode_id = e.episode_id
-            WHERE he.hypothesis_id = :id AND he.direction = 'contradict'
-            ORDER BY he.rank
-        """, {"id": id}),
         execute_query("""
             SELECT * FROM literature_sources
             WHERE :id = ANY(tags)
@@ -149,19 +147,9 @@ async def get_hypothesis(id: str):
         
     res = {
         "hypothesis": hyp,
-        "support_evidence": support_eps,
-        "contradict_evidence": contradict_eps,
         "research_evidence": lit_sources
     }
     set_cached(f"hypotheses_{id}", res)
-    return res
-
-@router.get("/emergent-labels")
-async def list_emergent_labels():
-    cached = get_cached("emergent-labels")
-    if cached: return cached
-    res = await execute_query("SELECT * FROM emergent_labels ORDER BY episode_count DESC")
-    set_cached("emergent-labels", res)
     return res
 
 @router.get("/gap-matrix")
@@ -178,111 +166,51 @@ async def get_gap_matrix():
     set_cached("gap-matrix", res)
     return res
 
-@router.get("/archetypes")
-async def list_archetypes():
-    cached = get_cached("archetypes")
-    if cached: return cached
-    res = await execute_query("SELECT * FROM archetype_stats ORDER BY opportunity_score DESC")
-    set_cached("archetypes", res)
-    return res
-
-@router.get("/archetypes/compare")
-async def compare_archetypes(a: str, b: str):
-    cached = get_cached(f"compare_{a}_{b}")
-    if cached: return cached
-    
-    arch_a, arch_b, quotes_a, quotes_b = await asyncio.gather(
-        fetch_one("SELECT * FROM archetype_stats WHERE archetype = :a", {"a": a}),
-        fetch_one("SELECT * FROM archetype_stats WHERE archetype = :b", {"b": b}),
-        execute_query("SELECT quote_en, quote_original, source, url FROM episodes e JOIN raw_records r ON e.record_id = r.record_id WHERE e.archetype_primary = :a LIMIT 3", {"a": a}),
-        execute_query("SELECT quote_en, quote_original, source, url FROM episodes e JOIN raw_records r ON e.record_id = r.record_id WHERE e.archetype_primary = :b LIMIT 3", {"b": b})
-    )
-    
-    res = {
-        "a": {"stats": arch_a, "quotes": quotes_a},
-        "b": {"stats": arch_b, "quotes": quotes_b}
-    }
-    set_cached(f"compare_{a}_{b}", res)
-    return res
-
-@router.get("/episodes")
-async def list_episodes(
+@router.get("/signals")
+async def list_signals(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    archetype: Optional[str] = None,
-    category: Optional[str] = None,
-    origin: Optional[str] = None,
-    outcome: Optional[str] = None,
-    stakes: Optional[str] = None,
-    confidence: Optional[str] = None,
-    search: Optional[str] = None,
+    scope: Optional[str] = None,
+    relevance_class: Optional[str] = None,
+    theme: Optional[str] = None,
     source: Optional[str] = None,
-    hypothesis: Optional[str] = None,
-    hypothesis_direction: Optional[str] = None,
-    cue_type: Optional[str] = None,
-    trigger: Optional[str] = None,
-    expectation: Optional[str] = None,
-    mental_model: Optional[str] = None,
-    organizing_habit: Optional[str] = None
+    product: Optional[str] = None,
+    funnel_stage: Optional[str] = None,
+    outcome: Optional[str] = None
 ):
-    where = []
+    where = ["s.is_duplicate = FALSE"]
     params = {}
     
-    if archetype:
-        where.append("e.archetype_primary = :archetype")
-        params["archetype"] = archetype
-    if category:
-        where.append("e.photo_category = :category")
-        params["category"] = category
-    if origin:
-        where.append("e.photo_origin = :origin")
-        params["origin"] = origin
-    if outcome:
-        where.append("e.outcome = :outcome")
-        params["outcome"] = outcome
-    if stakes:
-        where.append("e.stakes = :stakes")
-        params["stakes"] = stakes
-    if confidence:
-        where.append("e.extraction_confidence = :confidence")
-        params["confidence"] = confidence
-    if search:
-        where.append("e.summary_en ILIKE :search")
-        params["search"] = f"%{search}%"
+    if scope:
+        where.append("r.scope = :scope")
+        params["scope"] = scope
+    if relevance_class:
+        where.append("r.relevance_class = :relevance_class")
+        params["relevance_class"] = relevance_class
+    if theme:
+        where.append("EXISTS (SELECT 1 FROM signal_reasons sr WHERE sr.signal_id = s.signal_id AND sr.theme_id = :theme)")
+        params["theme"] = theme
     if source:
         where.append("r.source = :source")
         params["source"] = source
-    if hypothesis:
-        sub_where = ["he.episode_id = e.episode_id", "he.hypothesis_id = :hypothesis"]
-        params["hypothesis"] = hypothesis
-        if hypothesis_direction:
-            sub_where.append("he.direction = :hypothesis_direction")
-            params["hypothesis_direction"] = hypothesis_direction
-        where.append(f"EXISTS (SELECT 1 FROM hypothesis_evidence he WHERE {' AND '.join(sub_where)})")
-    if cue_type:
-        where.append("EXISTS (SELECT 1 FROM episode_cues ec WHERE ec.episode_id = e.episode_id AND ec.cue_type = :cue_type)")
-        params["cue_type"] = cue_type
-    if trigger:
-        where.append("e.trigger = :trigger")
-        params["trigger"] = trigger
-    if expectation:
-        where.append("e.expectation = :expectation")
-        params["expectation"] = expectation
-    if mental_model:
-        where.append("e.mental_model = :mental_model")
-        params["mental_model"] = mental_model
-    if organizing_habit:
-        where.append("e.organizing_habit = :organizing_habit")
-        params["organizing_habit"] = organizing_habit
+    if product:
+        where.append("s.product = :product")
+        params["product"] = product
+    if outcome:
+        where.append("s.outcome = :outcome")
+        params["outcome"] = outcome
+    if funnel_stage:
+        where.append("EXISTS (SELECT 1 FROM signal_reasons sr WHERE sr.signal_id = s.signal_id AND sr.funnel_stage = :funnel_stage)")
+        params["funnel_stage"] = funnel_stage
         
-    where_clause = "WHERE " + " AND ".join(where) if where else ""
+    where_clause = "WHERE " + " AND ".join(where)
     
-    count_q = f"SELECT count(*) as c FROM episodes e {where_clause}"
+    count_q = f"SELECT count(*) as c FROM signals s JOIN raw_records r ON s.record_id = r.record_id {where_clause}"
     
     data_q = f"""
-        SELECT e.*, r.source, r.lang, r.created_at, r.url
-        FROM episodes e
-        JOIN raw_records r ON e.record_id = r.record_id
+        SELECT s.*, r.source, r.lang, r.created_at, r.url, r.scope, r.relevance_class
+        FROM signals s
+        JOIN raw_records r ON s.record_id = r.record_id
         {where_clause}
         ORDER BY r.created_at DESC NULLS LAST
         LIMIT :limit OFFSET :offset
@@ -291,9 +219,6 @@ async def list_episodes(
     params_data["limit"] = per_page
     params_data["offset"] = (page - 1) * per_page
     
-    # We do NOT cache episodes queries according to user requirements, OR cache per query
-    # The requirement: "Keep /episodes filters uncached or cached per query."
-    # We'll leave it uncached as we use gather for concurrent execution.
     total_res, data = await asyncio.gather(
         fetch_one(count_q, params),
         execute_query(data_q, params_data)
@@ -306,77 +231,31 @@ async def list_episodes(
         "per_page": per_page
     }
 
-@router.get("/episodes/export")
-async def export_episodes(
-    archetype: Optional[str] = None,
-    category: Optional[str] = None,
-    origin: Optional[str] = None,
-    outcome: Optional[str] = None,
-    stakes: Optional[str] = None,
-    confidence: Optional[str] = None,
-    search: Optional[str] = None,
-    source: Optional[str] = None,
-    hypothesis: Optional[str] = None,
-    hypothesis_direction: Optional[str] = None,
-    cue_type: Optional[str] = None
+@router.get("/episodes")
+async def list_episodes(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100)
 ):
-    where = []
-    params = {}
-    
-    if archetype:
-        where.append("e.archetype_primary = :archetype")
-        params["archetype"] = archetype
-    if category:
-        where.append("e.photo_category = :category")
-        params["category"] = category
-    if origin:
-        where.append("e.photo_origin = :origin")
-        params["origin"] = origin
-    if outcome:
-        where.append("e.outcome = :outcome")
-        params["outcome"] = outcome
-    if stakes:
-        where.append("e.stakes = :stakes")
-        params["stakes"] = stakes
-    if confidence:
-        where.append("e.extraction_confidence = :confidence")
-        params["confidence"] = confidence
-    if search:
-        where.append("e.summary_en ILIKE :search")
-        params["search"] = f"%{search}%"
-    if source:
-        where.append("r.source = :source")
-        params["source"] = source
-    if hypothesis:
-        sub_where = ["he.episode_id = e.episode_id", "he.hypothesis_id = :hypothesis"]
-        params["hypothesis"] = hypothesis
-        if hypothesis_direction:
-            sub_where.append("he.direction = :hypothesis_direction")
-            params["hypothesis_direction"] = hypothesis_direction
-        where.append(f"EXISTS (SELECT 1 FROM hypothesis_evidence he WHERE {' AND '.join(sub_where)})")
-    if cue_type:
-        where.append("EXISTS (SELECT 1 FROM episode_cues ec WHERE ec.episode_id = e.episode_id AND ec.cue_type = :cue_type)")
-        params["cue_type"] = cue_type
-        
-    where_clause = "WHERE " + " AND ".join(where) if where else ""
-
-    data = await execute_query(f"""
-        SELECT e.episode_id, e.archetype_primary, e.summary_en, e.quote_en, e.outcome, r.source, r.url
+    count_q = "SELECT count(*) as c FROM episodes e"
+    data_q = """
+        SELECT e.*, r.source, r.lang, r.created_at, r.url
         FROM episodes e
         JOIN raw_records r ON e.record_id = r.record_id
-        {where_clause}
-    """, params)
+        ORDER BY r.created_at DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """
     
-    if not data:
-        return Response("No data", media_type="text/plain")
-        
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=data[0].keys())
-    writer.writeheader()
-    for row in data:
-        writer.writerow(row)
-        
-    return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=episodes.csv"})
+    total_res, data = await asyncio.gather(
+        fetch_one(count_q),
+        execute_query(data_q, {"limit": per_page, "offset": (page - 1) * per_page})
+    )
+    
+    return {
+        "items": data,
+        "total": total_res["c"] if total_res else 0,
+        "page": page,
+        "per_page": per_page
+    }
 
 @router.get("/episodes/{id}")
 async def get_episode(id: str):
@@ -404,23 +283,22 @@ async def get_how_it_works():
     cached = get_cached("how-it-works")
     if cached: return cached
     
-    funnel_raw, funnel_deduped, funnel_keyword, funnel_rel, funnel_eps, example, eval_results = await asyncio.gather(
+    funnel_raw, funnel_deduped, funnel_keyword, funnel_rel, funnel_sigs, example = await asyncio.gather(
         fetch_one("SELECT count(*) as c FROM raw_records"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE status != 'raw'"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE keyword_hit = true"),
-        fetch_one("SELECT count(*) as c FROM raw_records WHERE relevance_class IN ('specific_episode', 'success_or_tip')"),
-        fetch_one("SELECT count(*) as c FROM episodes"),
+        fetch_one("SELECT count(*) as c FROM raw_records WHERE scope IN ('core', 'adjacent')"),
+        fetch_one("SELECT count(*) as c FROM signals"),
         fetch_one("""
-            SELECT e.*, r.lang, r.url 
-            FROM episodes e 
-            JOIN raw_records r ON e.record_id = r.record_id 
+            SELECT s.*, r.lang, r.url 
+            FROM signals s 
+            JOIN raw_records r ON s.record_id = r.record_id 
             WHERE r.lang != 'en' LIMIT 1
-        """),
-        execute_query("SELECT * FROM eval_results ORDER BY run_at DESC LIMIT 1")
+        """)
     )
     
     if not example:
-        example = await fetch_one("SELECT e.*, r.lang, r.url FROM episodes e JOIN raw_records r ON e.record_id = r.record_id LIMIT 1")
+        example = await fetch_one("SELECT s.*, r.lang, r.url FROM signals s JOIN raw_records r ON s.record_id = r.record_id LIMIT 1")
     
     res = {
         "funnel": {
@@ -428,10 +306,9 @@ async def get_how_it_works():
             "deduped": funnel_deduped["c"] if funnel_deduped else 0,
             "keyword_pass": funnel_keyword["c"] if funnel_keyword else 0,
             "llm_relevant": funnel_rel["c"] if funnel_rel else 0,
-            "extracted_episodes": funnel_eps["c"] if funnel_eps else 0,
+            "extracted_signals": funnel_sigs["c"] if funnel_sigs else 0,
         },
-        "example_episode": example,
-        "eval_results": eval_results[0] if eval_results else None,
+        "example_signal": example,
         "config": {
             "time_window": "24 months",
             "models": ["gemini-3.5-flash-lite", "gemini-3.8-flash", "BAAI/bge-small-en-v1.5"]
@@ -450,7 +327,7 @@ async def list_literature():
 
 @router.get("/segments")
 async def get_segments(dimension: str):
-    allowed = ["photo_group", "photo_origin", "platform", "language", "role_hints", "product"]
+    allowed = ["source", "product", "class", "language"]
     if dimension not in allowed:
         return {"error": "Invalid dimension"}
         
@@ -466,42 +343,17 @@ async def get_handoff():
     cached = get_cached("handoff")
     if cached: return cached
     
-    drafts, d1, d3, top_segments_rows, contradicted = await asyncio.gather(
-        execute_query("SELECT * FROM research_handoff"),
-        execute_query("SELECT hypothesis_id, title, status FROM hypotheses WHERE evidence_strength IN ('directional', 'strong')"),
-        fetch_one("SELECT archetype, opportunity_score FROM archetype_stats ORDER BY opportunity_score DESC LIMIT 1"),
-        execute_query("SELECT dimension, value, archetype FROM segment_stats WHERE episode_count >= 10 ORDER BY episode_count DESC LIMIT 3"),
-        execute_query("SELECT title FROM hypotheses WHERE status = 'contradicted'")
-    )
-    
-    if top_segments_rows:
-        d2 = ", ".join(f"{row['archetype']} in {row['dimension']}={row['value']}" for row in top_segments_rows)
-    else:
-        d2 = "Not enough data yet"
-        
-    if contradicted:
-        d4 = ", ".join(row["title"] for row in contradicted)
-    else:
-        d4 = "None yet"
+    hyps = await execute_query("""
+        SELECT hypothesis_id, title, statement, research_question 
+        FROM hypotheses 
+        WHERE origin = 'data_derived' 
+        ORDER BY rank DESC
+    """)
         
     res = {
-        "decisions": {
-            "D1": d1,
-            "D2": d2,
-            "D3": d3["archetype"] if d3 else "Unknown",
-            "D4": d4
-        },
-        "drafts": drafts
+        "hypotheses": hyps
     }
     set_cached("handoff", res)
-    return res
-
-@router.get("/funnel")
-async def get_funnel_stats():
-    cached = get_cached("funnel")
-    if cached: return cached
-    res = await execute_query("SELECT * FROM funnel_stats")
-    set_cached("funnel", res)
     return res
 
 
