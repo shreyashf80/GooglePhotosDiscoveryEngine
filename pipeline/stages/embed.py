@@ -77,5 +77,30 @@ def run_embed() -> dict:
               )
         """))
 
+    # Cross-record duplicates (FR-X)
+    logger.info("Embed: flagging cross-record duplicates...")
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE episodes e1
+            SET is_duplicate = TRUE
+            FROM raw_records r1
+            WHERE e1.record_id = r1.record_id
+              AND EXISTS (
+                SELECT 1 FROM episodes e2
+                JOIN raw_records r2 ON e2.record_id = r2.record_id
+                WHERE e1.episode_id != e2.episode_id
+                  AND e1.embedding IS NOT NULL AND e2.embedding IS NOT NULL
+                  AND (
+                      (r1.author_hash = r2.author_hash AND r1.author_hash IS NOT NULL)
+                      OR
+                      (r1.source = 'reddit' AND r2.source = 'reddit' 
+                       AND substring(r1.url from 'comments/([^/]+)') = substring(r2.url from 'comments/([^/]+)') 
+                       AND substring(r1.url from 'comments/([^/]+)') IS NOT NULL)
+                  )
+                  AND (e1.embedding <=> e2.embedding) < 0.08
+                  AND (r1.created_at > r2.created_at OR (r1.created_at = r2.created_at AND e1.episode_id > e2.episode_id))
+            )
+        """))
+
     logger.info(f"Embed stage complete: {processed} episodes embedded")
     return {"processed": processed}

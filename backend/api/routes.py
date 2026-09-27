@@ -214,7 +214,11 @@ async def list_episodes(
     source: Optional[str] = None,
     hypothesis: Optional[str] = None,
     hypothesis_direction: Optional[str] = None,
-    cue_type: Optional[str] = None
+    cue_type: Optional[str] = None,
+    trigger: Optional[str] = None,
+    expectation: Optional[str] = None,
+    mental_model: Optional[str] = None,
+    organizing_habit: Optional[str] = None
 ):
     where = []
     params = {}
@@ -253,6 +257,18 @@ async def list_episodes(
     if cue_type:
         where.append("EXISTS (SELECT 1 FROM episode_cues ec WHERE ec.episode_id = e.episode_id AND ec.cue_type = :cue_type)")
         params["cue_type"] = cue_type
+    if trigger:
+        where.append("e.trigger = :trigger")
+        params["trigger"] = trigger
+    if expectation:
+        where.append("e.expectation = :expectation")
+        params["expectation"] = expectation
+    if mental_model:
+        where.append("e.mental_model = :mental_model")
+        params["mental_model"] = mental_model
+    if organizing_habit:
+        where.append("e.organizing_habit = :organizing_habit")
+        params["organizing_habit"] = organizing_habit
         
     where_clause = "WHERE " + " AND ".join(where) if where else ""
     

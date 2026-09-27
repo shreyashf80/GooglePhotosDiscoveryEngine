@@ -20,6 +20,7 @@ class RelevanceClass(StrEnum):
     SPECIFIC_EPISODE = "specific_episode"
     GENERAL_SEARCH_COMPLAINT = "general_search_complaint"
     SUCCESS_OR_TIP = "success_or_tip"
+    BELIEVES_LOST = "believes_lost"
     LOST_NOT_HIDDEN = "lost_not_hidden"
     IRRELEVANT = "irrelevant"
 
@@ -166,6 +167,60 @@ class Outcome(StrEnum):
     FOUND_WITH_EFFORT = "found_with_effort"
     GAVE_UP = "gave_up"
     STILL_SEARCHING = "still_searching"
+    UNKNOWN = "unknown"
+
+
+# --- V2 Behavior Fields ---
+
+class Trigger(StrEnum):
+    SHARE_WITH_SOMEONE = "share_with_someone"
+    DOCUMENT_OR_FORM = "document_or_form"
+    PROOF_OR_RECORD = "proof_or_record"
+    NOSTALGIA = "nostalgia"
+    REUSE_CONTENT = "reuse_content"
+    REFERENCE_OR_RECALL = "reference_or_recall"
+    OTHER = "other"
+    UNKNOWN = "unknown"
+
+
+class Expectation(StrEnum):
+    UNDERSTAND_DESCRIPTION = "understand_description"
+    FILTER_BY_DATE_OR_PLACE = "filter_by_date_or_place"
+    AI_SHOULD_FIND_IT = "ai_should_find_it"
+    ASSUMED_SAVED = "assumed_saved"
+    OTHER = "other"
+    UNKNOWN = "unknown"
+
+
+class MentalModel(StrEnum):
+    BY_DATE_TIMELINE = "by_date_timeline"
+    BY_ALBUM_OR_FOLDER = "by_album_or_folder"
+    BY_SOURCE_APP = "by_source_app"
+    SEARCH_UNDERSTANDS_MEANING = "search_understands_meaning"
+    ALL_IN_ONE_PLACE = "all_in_one_place"
+    UNKNOWN = "unknown"
+
+
+class OrganizingHabit(StrEnum):
+    USES_ALBUMS = "uses_albums"
+    USES_FAVORITES_OR_CAPTIONS = "uses_favorites_or_captions"
+    LABELS_FACES = "labels_faces"
+    NO_ORGANIZATION = "no_organization"
+    UNKNOWN = "unknown"
+
+
+class Frequency(StrEnum):
+    ONE_OFF = "one_off"
+    RECURRING = "recurring"
+    UNKNOWN = "unknown"
+
+
+class EmotionalCost(StrEnum):
+    FRUSTRATED = "frustrated"
+    ANXIOUS_OR_PANICKED = "anxious_or_panicked"
+    RESIGNED = "resigned"
+    RELIEVED = "relieved"
+    NEUTRAL = "neutral"
     UNKNOWN = "unknown"
 
 

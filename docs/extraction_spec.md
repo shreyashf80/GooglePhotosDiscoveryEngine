@@ -21,7 +21,8 @@ Each record gets exactly one `relevance_class`:
 | `specific_episode` | User tried (or is trying) to find one particular photo or small set of photos | "Trying to find the pic of my dad's prescription from last year, search shows nothing" |
 | `general_search_complaint` | Complains about search or finding photos in general, no specific target | "Google Photos search is useless now" |
 | `success_or_tip` | User found a hard-to-find photo, or shares a method that works | "Tip: search the text on the receipt, it finds it instantly" |
-| `lost_not_hidden` | Photo is gone or never saved: deletion, sync failure, backup loss, account issue | "All my 2023 photos disappeared after changing phones" |
+| `believes_lost` | User thinks the photo is gone, but the context suggests it might just be hard to find (treated as relevant) | "I know I took a pic of the receipt but Google Photos lost it" |
+| `lost_not_hidden` | Photo is clearly gone or never saved: deletion, sync failure, backup loss, account issue | "All my 2023 photos disappeared after changing phones" |
 | `irrelevant` | Anything else: pricing, storage, editing, UI unrelated to finding | "Why is storage so expensive" |
 
 **Tie-breaking rules**
@@ -34,7 +35,7 @@ Output per record:
 { "record_id": "rd_123", "relevance_class": "specific_episode", "lang": "hi-Latn", "reason": "short English reason" }
 ```
 
-Only `specific_episode`, `general_search_complaint` and `success_or_tip` go to Stage 2.
+Only `specific_episode`, `general_search_complaint`, `success_or_tip` and `believes_lost` go to Stage 2.
 
 ---
 
@@ -50,6 +51,9 @@ Only `specific_episode`, `general_search_complaint` and `success_or_tip` go to S
 | `mentions_ask_photos` | bool | True if Ask Photos or Gemini-based search is mentioned |
 | `ask_photos_note` | string or null | One sentence on what happened with Ask Photos |
 | `general_failure_modes` | list of enum | Only for `general_search_complaint`, uses the failure_mode enum |
+| `out_of_scope` | bool | True if the request is not related to retrieving photos |
+| `out_of_scope_reason` | string | Reason for being out of scope |
+| `record_behavior` | JSON | Behaviour data extracted at the record level |
 | `episodes` | list (0 to 3) | Empty for general complaints |
 
 ### 2.2 Episode fields
@@ -68,6 +72,12 @@ Only `specific_episode`, `general_search_complaint` and `success_or_tip` go to S
 | `workarounds` | list of enum | See 3.6 |
 | `outcome` | enum | `found_easily`, `found_with_effort`, `gave_up`, `still_searching`, `unknown` |
 | `stakes` | enum | `sentimental`, `practical_routine`, `practical_urgent`, `unknown` |
+| `trigger` | enum | `share_with_someone`, `document_or_form`, `proof_or_record`, `nostalgia`, `reuse_content`, `reference_or_recall`, `other`, `unknown` |
+| `expectation` | enum | `understand_description`, `filter_by_date_or_place`, `ai_should_find_it`, `assumed_saved`, `other`, `unknown` |
+| `mental_model` | enum | `by_date_timeline`, `by_album_or_folder`, `by_source_app`, `search_understands_meaning`, `all_in_one_place`, `unknown` |
+| `organizing_habit` | enum | `uses_albums`, `uses_favorites_or_captions`, `labels_faces`, `no_organization`, `unknown` |
+| `frequency` | enum | `one_off`, `recurring`, `unknown` |
+| `emotional_cost` | enum | `frustrated`, `anxious_or_panicked`, `resigned`, `relieved`, `neutral`, `unknown` |
 | `role_hints` | list of enum | `parent`, `traveler`, `student`, `professional`, `caregiver`, `small_business`, `elderly_user` (only if stated) |
 | `archetype_primary` | enum | See section 4 |
 | `archetype_secondary` | enum or null | See section 4 |

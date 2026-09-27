@@ -32,6 +32,7 @@ from pipeline.config import (
     GEMINI_API_KEYS,
     MAX_EXTRACT_RETRIES,
     PROMPTS_DIR,
+    PROMPT_VERSION,
     require_model_id,
 )
 from pipeline.db import engine
@@ -40,8 +41,6 @@ from pipeline.llm.key_pool import KeyPool
 from shared.models import RecordExtraction
 
 logger = logging.getLogger(__name__)
-
-PROMPT_VERSION = "extract_v1"
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +151,10 @@ def _persist_extraction(
 
     # Delete existing episodes and cascading child rows before re-extracting
     conn.execute(
+        text("DELETE FROM hypothesis_evidence WHERE episode_id IN (SELECT episode_id FROM episodes WHERE record_id = :id)"),
+        {"id": record_id}
+    )
+    conn.execute(
         text("DELETE FROM episodes WHERE record_id = :id"),
         {"id": record_id}
     )
@@ -180,15 +183,27 @@ def _persist_extraction(
             UPDATE raw_records
             SET platform = :platform,
                 mentions_ask_photos = :mentions_ask_photos,
-                ask_photos_note = :ask_photos_note
+                ask_photos_note = :ask_photos_note,
+                out_of_scope = :out_of_scope,
+                out_of_scope_reason = :out_of_scope_reason,
+                record_behavior = :record_behavior
             WHERE record_id = :id
         """),
         {
             "platform": extraction.platform.value if hasattr(extraction.platform, "value") else str(extraction.platform),
             "mentions_ask_photos": extraction.mentions_ask_photos,
             "ask_photos_note": extraction.ask_photos_note,
+            "out_of_scope": extraction.out_of_scope,
+            "out_of_scope_reason": extraction.out_of_scope_reason,
+            "record_behavior": extraction.record_behavior.model_dump_json() if extraction.record_behavior else None,
             "id": record_id,
         },
+    )
+
+    # Delete old episodes (and cascade to child tables) to replace them cleanly
+    conn.execute(
+        text("DELETE FROM episodes WHERE record_id = :id"),
+        {"id": record_id}
     )
 
     # Write episodes
@@ -210,7 +225,9 @@ def _persist_extraction(
                     target_description, photo_category, photo_origin,
                     photo_age_bucket, photo_age_evidence,
                     failure_modes, workarounds,
-                    outcome, stakes, role_hints,
+                    outcome, stakes, trigger, expectation,
+                    mental_model, organizing_habit, frequency, emotional_cost,
+                    role_hints,
                     archetype_primary, archetype_secondary, emergent_label,
                     summary_en, quote_original, quote_en,
                     extraction_confidence, prompt_version, model_id
@@ -219,7 +236,9 @@ def _persist_extraction(
                     :target_description, :photo_category, :photo_origin,
                     :photo_age_bucket, :photo_age_evidence,
                     :failure_modes, :workarounds,
-                    :outcome, :stakes, :role_hints,
+                    :outcome, :stakes, :trigger, :expectation,
+                    :mental_model, :organizing_habit, :frequency, :emotional_cost,
+                    :role_hints,
                     :archetype_primary, :archetype_secondary, :emergent_label,
                     :summary_en, :quote_original, :quote_en,
                     :extraction_confidence, :prompt_version, :model_id
@@ -243,6 +262,12 @@ def _persist_extraction(
                 "workarounds": workarounds_list,
                 "outcome": _val(ep.outcome),
                 "stakes": _val(ep.stakes),
+                "trigger": _val(ep.trigger),
+                "expectation": _val(ep.expectation),
+                "mental_model": _val(ep.mental_model),
+                "organizing_habit": _val(ep.organizing_habit),
+                "frequency": _val(ep.frequency),
+                "emotional_cost": _val(ep.emotional_cost),
                 "role_hints": role_hints_list,
                 "archetype_primary": _val(ep.archetype_primary),
                 "archetype_secondary": _val(ep.archetype_secondary) if ep.archetype_secondary else None,
@@ -352,7 +377,7 @@ def run_extract(limit: Optional[int] = None) -> dict:
         )
 
     # Load prompt template
-    prompt_path = PROMPTS_DIR / "extract_v1.md"
+    prompt_path = PROMPTS_DIR / f"extract_{PROMPT_VERSION}.md"
     prompt_template = prompt_path.read_text()
 
     # Initialize LLM client
@@ -602,6 +627,10 @@ def run_extract(limit: Optional[int] = None) -> dict:
                 sum(1 for row in batch if row.record_id in results_by_id),
                 counts["episodes_created"],
             )
+
+    except ServiceUnavailableError as e:
+        logger.error("Extract stopped cleanly due to continuous 503 errors: %s", e)
+        # It will proceed to finally block and log the run_id
 
     finally:
         # Write pipeline_runs row (T-2.5d, FR-6)

@@ -41,6 +41,11 @@ function EpisodeRow({ ep }: { ep: any }) {
                 <AlertTriangle className="h-3 w-3 mr-1" /> Low Confidence
               </Badge>
             )}
+            {ep.is_duplicate && (
+              <Badge variant="outline" className="bg-gray-100 text-gray-500 border-gray-200 ml-2 whitespace-nowrap">
+                Duplicate
+              </Badge>
+            )}
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
             <Badge variant="secondary"><EnumLabel value={ep.archetype_primary} /></Badge>
@@ -135,6 +140,18 @@ function EpisodeRow({ ep }: { ep: any }) {
                   </div>
                 </div>
               )}
+              
+              <div>
+                <h4 className="font-semibold text-sm text-gray-700 mb-2">Behavior Context</h4>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><span className="text-gray-500">Trigger:</span> <EnumLabel value={ep.trigger || 'unknown'} /></div>
+                  <div><span className="text-gray-500">Expectation:</span> <EnumLabel value={ep.expectation || 'unknown'} /></div>
+                  <div><span className="text-gray-500">Mental Model:</span> <EnumLabel value={ep.mental_model || 'unknown'} /></div>
+                  <div><span className="text-gray-500">Organizing Habit:</span> <EnumLabel value={ep.organizing_habit || 'unknown'} /></div>
+                  <div><span className="text-gray-500">Frequency:</span> <EnumLabel value={ep.frequency || 'unknown'} /></div>
+                  <div><span className="text-gray-500">Emotional Cost:</span> <EnumLabel value={ep.emotional_cost || 'unknown'} /></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -247,6 +264,57 @@ export default function EvidenceClient({ initialData, searchParams }: { initialD
               value={searchParams.cue_type || ''} 
               onChange={e => updateFilter('cue_type', e.target.value)} 
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Trigger</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.trigger || ''} onChange={e => updateFilter('trigger', e.target.value)}>
+              <option value="">All</option>
+              <option value="share_with_someone">Share with Someone</option>
+              <option value="document_or_form">Document/Form</option>
+              <option value="proof_or_record">Proof/Record</option>
+              <option value="nostalgia">Nostalgia</option>
+              <option value="reuse_content">Reuse Content</option>
+              <option value="reference_or_recall">Reference/Recall</option>
+              <option value="other">Other</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Expectation</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.expectation || ''} onChange={e => updateFilter('expectation', e.target.value)}>
+              <option value="">All</option>
+              <option value="understand_description">Understand Description</option>
+              <option value="filter_by_date_or_place">Filter by Date/Place</option>
+              <option value="ai_should_find_it">AI Should Find It</option>
+              <option value="assumed_saved">Assumed Saved</option>
+              <option value="other">Other</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Mental Model</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.mental_model || ''} onChange={e => updateFilter('mental_model', e.target.value)}>
+              <option value="">All</option>
+              <option value="by_date_timeline">By Date/Timeline</option>
+              <option value="by_album_or_folder">By Album/Folder</option>
+              <option value="by_source_app">By Source App</option>
+              <option value="search_understands_meaning">Search Understands Meaning</option>
+              <option value="all_in_one_place">All In One Place</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Organizing Habit</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.organizing_habit || ''} onChange={e => updateFilter('organizing_habit', e.target.value)}>
+              <option value="">All</option>
+              <option value="uses_albums">Uses Albums</option>
+              <option value="uses_favorites_or_captions">Favorites/Captions</option>
+              <option value="labels_faces">Labels Faces</option>
+              <option value="no_organization">No Organization</option>
+              <option value="unknown">Unknown</option>
+            </select>
           </div>
           <div className="flex gap-2">
             <div className="flex-1">

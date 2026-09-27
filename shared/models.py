@@ -15,11 +15,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from shared.enums import (
     Archetype,
     CueType,
+    EmotionalCost,
+    Expectation,
     ExtractionConfidence,
     EvidenceStrength,
     FailureMode,
+    Frequency,
     HypothesisStatus,
     ItemType,
+    MentalModel,
+    OrganizingHabit,
     Outcome,
     PhotoAgeBucket,
     PhotoCategory,
@@ -33,6 +38,7 @@ from shared.enums import (
     Searchable,
     Source,
     Stakes,
+    Trigger,
     Workaround,
 )
 
@@ -78,6 +84,12 @@ class EpisodeExtraction(BaseModel):
     workarounds: list[Workaround] = Field(default_factory=list)
     outcome: Outcome
     stakes: Stakes = Stakes.UNKNOWN
+    trigger: Trigger = Trigger.UNKNOWN
+    expectation: Expectation = Expectation.UNKNOWN
+    mental_model: MentalModel = MentalModel.UNKNOWN
+    organizing_habit: OrganizingHabit = OrganizingHabit.UNKNOWN
+    frequency: Frequency = Frequency.UNKNOWN
+    emotional_cost: EmotionalCost = EmotionalCost.UNKNOWN
     role_hints: list[RoleHint] = Field(default_factory=list)
     archetype_primary: Archetype
     archetype_secondary: Optional[Archetype] = None
@@ -98,6 +110,15 @@ class EpisodeExtraction(BaseModel):
 # Record-level extraction (spec Section 2.1)
 # ---------------------------------------------------------------------------
 
+class RecordBehavior(BaseModel):
+    """Behavior fields for records with no episodes (e.g. general complaints)."""
+    expectation: Expectation = Expectation.UNKNOWN
+    mental_model: MentalModel = MentalModel.UNKNOWN
+    organizing_habit: OrganizingHabit = OrganizingHabit.UNKNOWN
+    frequency: Frequency = Frequency.UNKNOWN
+    emotional_cost: EmotionalCost = EmotionalCost.UNKNOWN
+
+
 class RecordExtraction(BaseModel):
     """Full extraction result for one record."""
     record_id: str
@@ -106,6 +127,9 @@ class RecordExtraction(BaseModel):
     mentions_ask_photos: bool = False
     ask_photos_note: Optional[str] = None
     general_failure_modes: list[FailureMode] = Field(default_factory=list)
+    out_of_scope: bool = False
+    out_of_scope_reason: Optional[str] = None
+    record_behavior: Optional[RecordBehavior] = None
     episodes: list[EpisodeExtraction] = Field(default_factory=list, max_length=3)
 
     @field_validator("episodes")

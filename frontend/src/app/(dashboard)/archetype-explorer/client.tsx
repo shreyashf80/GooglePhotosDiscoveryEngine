@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { InfoIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-export default function ArchetypeClient({ initialArchetypes, comparison, currentA, currentB }: { initialArchetypes: any[], comparison: any, currentA?: string, currentB?: string }) {
+export default function ArchetypeClient({ initialArchetypes, emergentLabels, comparison, currentA, currentB }: { initialArchetypes: any[], emergentLabels?: any[], comparison: any, currentA?: string, currentB?: string }) {
   const router = useRouter();
 
   const handleCompareChange = (key: 'a' | 'b', value: string) => {
@@ -60,7 +60,7 @@ export default function ArchetypeClient({ initialArchetypes, comparison, current
               </PopoverContent>
             </Popover>
           </div>
-          {initialArchetypes.map((arch) => (
+          {initialArchetypes.filter(arch => arch.archetype !== 'emergent').map((arch) => (
             <Card key={arch.archetype}>
               <CardContent className="flex items-center justify-between p-6">
                 <div>
@@ -84,6 +84,44 @@ export default function ArchetypeClient({ initialArchetypes, comparison, current
               </CardContent>
             </Card>
           ))}
+
+          {/* Emergent (Unclassified Patterns) Section */}
+          {(() => {
+            const emergent = initialArchetypes.find(a => a.archetype === 'emergent');
+            if (!emergent) return null;
+            return (
+              <div className="mt-8">
+                <h3 className="text-xl font-semibold mb-4">Unclassified Patterns</h3>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-700">Emergent</h3>
+                        <div className="flex gap-4 text-sm text-gray-500 mt-1">
+                          <span>Episodes: <ClickableCount count={emergent.episode_count} param="archetype" value={emergent.archetype} /></span>
+                          <span>Severity: {emergent.avg_severity?.toFixed(1)}</span>
+                          <span>Stakes: {emergent.avg_stakes_weight?.toFixed(1)}</span>
+                        </div>
+                      </div>
+                      <EvidenceBadge strength={emergent.evidence_strength} />
+                    </div>
+                    {emergentLabels && emergentLabels.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-semibold mb-2">Discovered Labels</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {emergentLabels.map((lbl, idx) => (
+                            <Badge key={idx} variant="secondary">
+                              {lbl.emergent_label} ({lbl.episode_count})
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-8">

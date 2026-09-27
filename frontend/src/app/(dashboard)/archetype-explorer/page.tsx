@@ -7,11 +7,12 @@ export const revalidate = 300;
 
 async function ArchetypeData({ searchParams }: { searchParams: { a?: string, b?: string } }) {
   const archetypes = await fetchApi<any[]>('/archetypes')
+  const emergentLabels = await fetchApi<any[]>('/emergent-labels')
   let comparison = null;
   if (searchParams.a && searchParams.b) {
     comparison = await fetchApi<any>(`/archetypes/compare?a=${searchParams.a}&b=${searchParams.b}`)
   }
-  return <ArchetypeClient initialArchetypes={archetypes} comparison={comparison} currentA={searchParams.a} currentB={searchParams.b} />
+  return <ArchetypeClient initialArchetypes={archetypes} emergentLabels={emergentLabels} comparison={comparison} currentA={searchParams.a} currentB={searchParams.b} />
 }
 
 export default function ArchetypeExplorerPage({ searchParams }: { searchParams: { a?: string, b?: string } }) {

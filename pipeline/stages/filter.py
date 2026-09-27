@@ -28,6 +28,7 @@ from pipeline.config import (
     GEMINI_API_KEYS,
     KEYWORD_PREFILTER_ALL,
     PROMPTS_DIR,
+    PROMPT_VERSION,
     require_model_id,
 )
 from pipeline.db import engine
@@ -37,9 +38,6 @@ from shared.enums import RelevanceClass
 from shared.models import FilterResult
 
 logger = logging.getLogger(__name__)
-
-# Prompt version identifier
-PROMPT_VERSION = "filter_v1"
 
 # Classes that advance to extraction
 RELEVANT_CLASSES = frozenset({
@@ -127,7 +125,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
         )
 
     # Load prompt template
-    prompt_path = PROMPTS_DIR / "filter_v1.md"
+    prompt_path = PROMPTS_DIR / f"filter_{PROMPT_VERSION}.md"
     prompt_template = prompt_path.read_text()
 
     # Initialize LLM client
@@ -350,6 +348,10 @@ def run_filter(limit: Optional[int] = None) -> dict:
                             """),
                             {"id": r["record_id"], "reason": f"llm_error: {str(e)[:200]}", "run_id": run_id, "inc": 0 if is_transient else 1},
                         )
+
+    except ServiceUnavailableError as e:
+        logger.error("Filter stopped cleanly due to continuous 503 errors: %s", e)
+        # It will proceed to finally block and log the run_id
 
     finally:
         # Write pipeline_runs row (FR-6)

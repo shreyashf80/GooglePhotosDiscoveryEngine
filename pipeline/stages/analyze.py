@@ -129,10 +129,13 @@ def _compute_archetype_stats(episodes: list[dict], cues_by_episode: dict,
             "opportunity_score": 0.0,
             "evidence_strength": compute_evidence_strength(count),
         })
-    max_raw = max(raw_scores.values()) if raw_scores else 1.0
+    max_raw = max([score for arch, score in raw_scores.items() if arch != "emergent"], default=1.0)
     if max_raw > 0:
         for s in stats:
-            s["opportunity_score"] = round((raw_scores[s["archetype"]] / max_raw) * 100, 1)
+            if s["archetype"] == "emergent":
+                s["opportunity_score"] = 0.0
+            else:
+                s["opportunity_score"] = round((raw_scores[s["archetype"]] / max_raw) * 100, 1)
     return stats
 
 def _compute_funnel_stats(episodes: list[dict], cues_by_episode: dict,
@@ -403,19 +406,33 @@ def run_analyze() -> dict:
                    r.source, r.lang, e.summary_en, e.quote_en, e.photo_age_bucket, r.relevance_class, r.product
             FROM episodes e
             JOIN raw_records r ON e.record_id = r.record_id
+            WHERE e.is_duplicate = FALSE AND r.out_of_scope = FALSE
         """)).fetchall()
 
-        cue_rows = conn.execute(text(
-            "SELECT episode_id, cue_type, value, precision FROM episode_cues"
-        )).fetchall()
+        cue_rows = conn.execute(text("""
+            SELECT c.episode_id, c.cue_type, c.value, c.precision 
+            FROM episode_cues c
+            JOIN episodes e ON c.episode_id = e.episode_id
+            JOIN raw_records r ON e.record_id = r.record_id
+            WHERE e.is_duplicate = FALSE AND r.out_of_scope = FALSE
+        """)).fetchall()
 
-        query_rows = conn.execute(text(
-            "SELECT episode_id, query_text, query_style, position FROM episode_queries ORDER BY position"
-        )).fetchall()
+        query_rows = conn.execute(text("""
+            SELECT q.episode_id, q.query_text, q.query_style, q.position 
+            FROM episode_queries q
+            JOIN episodes e ON q.episode_id = e.episode_id
+            JOIN raw_records r ON e.record_id = r.record_id
+            WHERE e.is_duplicate = FALSE AND r.out_of_scope = FALSE
+            ORDER BY q.position
+        """)).fetchall()
 
-        forgotten_rows = conn.execute(text(
-            "SELECT episode_id, cue_type, evidence FROM episode_forgotten"
-        )).fetchall()
+        forgotten_rows = conn.execute(text("""
+            SELECT f.episode_id, f.cue_type, f.evidence 
+            FROM episode_forgotten f
+            JOIN episodes e ON f.episode_id = e.episode_id
+            JOIN raw_records r ON e.record_id = r.record_id
+            WHERE e.is_duplicate = FALSE AND r.out_of_scope = FALSE
+        """)).fetchall()
 
         general_rows = conn.execute(text("""
             SELECT general_failure_modes
@@ -423,6 +440,7 @@ def run_analyze() -> dict:
             WHERE relevance_class = 'general_search_complaint'
               AND general_failure_modes IS NOT NULL
               AND array_length(general_failure_modes, 1) > 0
+              AND out_of_scope = FALSE
         """)).fetchall()
 
     episodes = []
