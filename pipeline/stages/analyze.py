@@ -525,7 +525,9 @@ def run_analyze() -> dict:
             if not va:
                 va = now
             conn.execute(text("""INSERT INTO capability_reference (cue_type, searchable, note, verified_how, verified_at)
-                                 VALUES (:ct, :s, :n, :vh, :va)"""),
+                                 VALUES (:ct, :s, :n, :vh, :va)
+                                 ON CONFLICT (cue_type) DO UPDATE 
+                                 SET searchable = EXCLUDED.searchable, note = EXCLUDED.note, verified_how = EXCLUDED.verified_how, verified_at = EXCLUDED.verified_at"""),
                          {"ct": k, "s": v.get("searchable", "no"), "n": v.get("note", ""), "vh": vh, "va": va})
 
         conn.execute(text("DELETE FROM archetype_stats"))

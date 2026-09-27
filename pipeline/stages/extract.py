@@ -334,7 +334,7 @@ def _persist_extraction(
 # Main extract function
 # ---------------------------------------------------------------------------
 
-def run_extract(limit: Optional[int] = None) -> dict:
+def run_extract(limit: Optional[int] = None, reprocess: bool = False) -> dict:
     """
     Run Stage 2 episode extraction on filtered records.
 
@@ -347,6 +347,7 @@ def run_extract(limit: Optional[int] = None) -> dict:
 
     Args:
         limit: If set, process at most this many records.
+        reprocess: If True, resets and re-extracts records with outdated prompt_version.
 
     Returns:
         Dict with counts.
@@ -377,7 +378,7 @@ def run_extract(limit: Optional[int] = None) -> dict:
         )
 
     # Load prompt template
-    prompt_path = PROMPTS_DIR / f"extract_{PROMPT_VERSION}.md"
+    prompt_path = PROMPTS_DIR / f"{PROMPT_VERSION}.md"
     prompt_template = prompt_path.read_text()
 
     # Initialize LLM client
@@ -385,6 +386,34 @@ def run_extract(limit: Optional[int] = None) -> dict:
     client = GeminiClient(key_pool=key_pool, model_id=model_id)
 
     try:
+        # Reprocess logic: reset outdated records
+        if reprocess:
+            with engine.begin() as conn:
+                res = conn.execute(
+                    text("""
+                        SELECT DISTINCT e.record_id 
+                        FROM episodes e
+                        WHERE e.prompt_version IS DISTINCT FROM :current_version
+                    """),
+                    {"current_version": PROMPT_VERSION}
+                ).fetchall()
+                outdated_rids = [r[0] for r in res]
+                if outdated_rids:
+                    logger.info(f"Extract: resetting {len(outdated_rids)} records with outdated prompt_version")
+                    # Delete child records
+                    ep_ids = [r[0] for r in conn.execute(text("SELECT episode_id FROM episodes WHERE record_id = ANY(:rids)"), {"rids": outdated_rids}).fetchall()]
+                    if ep_ids:
+                        conn.execute(text("DELETE FROM episode_queries WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+                        conn.execute(text("DELETE FROM episode_cues WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+                        conn.execute(text("DELETE FROM episode_forgotten WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+                        conn.execute(text("DELETE FROM hypothesis_evidence WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+                        conn.execute(text("DELETE FROM episodes WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+                    # Reset status
+                    conn.execute(
+                        text("UPDATE raw_records SET status = 'filtered', retry_count = 0 WHERE record_id = ANY(:rids)"),
+                        {"rids": outdated_rids}
+                    )
+
         # Load filtered records
         with engine.begin() as conn:
             query = """

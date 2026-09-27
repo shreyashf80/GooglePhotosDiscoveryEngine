@@ -171,6 +171,28 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
                 </div>
               </div>
             </div>
+            {details.research_evidence && details.research_evidence.length > 0 && (
+              <div className="mt-6 border-t pt-4">
+                <h4 className="font-semibold text-blue-700 mb-3 border-b pb-1">Research Evidence</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {details.research_evidence.map((src: any) => (
+                    <div key={src.id} className="text-sm bg-white p-3 rounded shadow-sm border">
+                      <div className="flex justify-between items-start mb-2">
+                        <h5 className="font-medium">{src.title}</h5>
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{src.era}</span>
+                      </div>
+                      <p className="text-gray-600 mb-2">{src.citation}</p>
+                      {src.link && (
+                        <a href={src.link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs">
+                          Read source
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           ) : (
             <p className="text-sm text-red-500">Failed to load details.</p>
           )}

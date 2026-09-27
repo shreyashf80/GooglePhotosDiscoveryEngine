@@ -39,6 +39,16 @@ from shared.models import FilterResult
 
 logger = logging.getLogger(__name__)
 
+def _delete_episodes_for_record(conn, record_id: str):
+    ep_ids = [r[0] for r in conn.execute(text("SELECT episode_id FROM episodes WHERE record_id = :rid"), {"rid": record_id}).fetchall()]
+    if ep_ids:
+        conn.execute(text("DELETE FROM episode_queries WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+        conn.execute(text("DELETE FROM episode_cues WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+        conn.execute(text("DELETE FROM episode_forgotten WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+        conn.execute(text("DELETE FROM hypothesis_evidence WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+        conn.execute(text("DELETE FROM episodes WHERE episode_id = ANY(:eids)"), {"eids": ep_ids})
+
+
 # Classes that advance to extraction
 RELEVANT_CLASSES = frozenset({
     RelevanceClass.SPECIFIC_EPISODE,
@@ -190,6 +200,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                         """),
                         {"id": record_id, "run_id": run_id},
                     )
+                    _delete_episodes_for_record(conn, record_id)
                     counts["keyword_miss_en_excluded"] += 1
 
         logger.info(
@@ -306,6 +317,8 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                     "run_id": run_id,
                                 },
                             )
+                            if new_status == "excluded":
+                                _delete_episodes_for_record(conn, rid)
                         else:
                             # Record not in response — mark as error
                             logger.warning("Filter: record %s missing from LLM response", rid)

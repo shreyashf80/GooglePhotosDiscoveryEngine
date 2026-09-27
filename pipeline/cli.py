@@ -485,6 +485,7 @@ def filter_cmd(
 @app.command()
 def extract(
     limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Process at most N records"),
+    reprocess: bool = typer.Option(False, "--reprocess", help="Re-extract records with outdated prompt_version"),
 ) -> None:
     """Run Stage 2 episode extraction (M2). Gemini structured extraction."""
     from pipeline.stages.extract import run_extract
@@ -492,8 +493,10 @@ def extract(
     typer.echo("Running Stage 2: Episode extraction...")
     if limit:
         typer.echo(f"  (limited to {limit} records)")
+    if reprocess:
+        typer.echo(f"  (reprocess enabled)")
 
-    counts = run_extract(limit=limit)
+    counts = run_extract(limit=limit, reprocess=reprocess)
 
     typer.echo("\n📊 Extraction results:")
     typer.echo(f"  Records processed:       {counts.get('records_processed', 0):>6,d}")
@@ -726,6 +729,15 @@ def run_all() -> None:
     """Run all pipeline stages in order."""
     typer.echo("[STUB] run-all")
 
+
+@app.command(name="import-literature")
+def import_literature_cmd(path: str) -> None:
+    """Import and embed research literature (FR-62)."""
+    from pipeline.stages.import_literature import import_literature
+
+    typer.echo(f"Running Stage: Import literature from {path}...")
+    counts = import_literature(path)
+    typer.echo(f"\n✅ Imported {counts.get('processed', 0)} literature sources.")
 
 # ============================================================
 # Entry point

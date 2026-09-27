@@ -546,23 +546,21 @@ CREATE TABLE research_handoff (
 
 ```sql
 CREATE TABLE literature_sources (
-    source_id   TEXT PRIMARY KEY,
+    id          TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
-    authors     TEXT,
-    year        INTEGER,
-    url         TEXT,
-    imported_at TIMESTAMPTZ DEFAULT NOW()
+    citation    TEXT,
+    link        TEXT,
+    era         TEXT,
+    tags        TEXT[]
 );
 
 CREATE TABLE literature_chunks (
-    chunk_id    TEXT PRIMARY KEY,
-    source_id   TEXT NOT NULL REFERENCES literature_sources(source_id),
-    chunk_text  TEXT NOT NULL,
-    embedding   halfvec(384),
-    position    INTEGER NOT NULL
+    source_id   TEXT PRIMARY KEY REFERENCES literature_sources(id) ON DELETE CASCADE,
+    text        TEXT NOT NULL,
+    embedding   halfvec(384)
 );
 
-CREATE INDEX idx_lit_chunks_embedding ON literature_chunks
+CREATE INDEX idx_literature_chunks_embedding ON literature_chunks
     USING hnsw (embedding halfvec_cosine_ops);
 ```
 

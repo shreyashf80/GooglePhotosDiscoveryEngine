@@ -122,7 +122,7 @@ async def get_hypothesis(id: str):
     cached = get_cached(f"hypotheses_{id}")
     if cached: return cached
     
-    hyp, support_eps, contradict_eps = await asyncio.gather(
+    hyp, support_eps, contradict_eps, lit_sources = await asyncio.gather(
         fetch_one("SELECT * FROM hypotheses WHERE hypothesis_id = :id", {"id": id}),
         execute_query("""
             SELECT e.*, he.rank 
@@ -137,6 +137,10 @@ async def get_hypothesis(id: str):
             JOIN episodes e ON he.episode_id = e.episode_id
             WHERE he.hypothesis_id = :id AND he.direction = 'contradict'
             ORDER BY he.rank
+        """, {"id": id}),
+        execute_query("""
+            SELECT * FROM literature_sources
+            WHERE :id = ANY(tags)
         """, {"id": id})
     )
     
@@ -146,7 +150,8 @@ async def get_hypothesis(id: str):
     res = {
         "hypothesis": hyp,
         "support_evidence": support_eps,
-        "contradict_evidence": contradict_eps
+        "contradict_evidence": contradict_eps,
+        "research_evidence": lit_sources
     }
     set_cached(f"hypotheses_{id}", res)
     return res
@@ -433,6 +438,14 @@ async def get_how_it_works():
         }
     }
     set_cached("how-it-works", res)
+    return res
+
+@router.get("/literature")
+async def list_literature():
+    cached = get_cached("literature")
+    if cached: return cached
+    res = await execute_query("SELECT * FROM literature_sources ORDER BY id")
+    set_cached("literature", res)
     return res
 
 @router.get("/segments")
