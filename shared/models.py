@@ -105,6 +105,19 @@ class EpisodeExtraction(BaseModel):
             raise ValueError("emergent_label is required when archetype_primary is 'emergent'")
         return self
 
+    @model_validator(mode="after")
+    def check_utility_lookup(self) -> "EpisodeExtraction":
+        if self.archetype_primary == Archetype.UTILITY_LOOKUP:
+            valid_categories = {
+                PhotoCategory.DOCUMENT_TEXT,
+                PhotoCategory.HEALTH_MEDICAL,
+                PhotoCategory.RECEIPT_FINANCIAL,
+                PhotoCategory.SCREENSHOT_DIGITAL
+            }
+            if self.photo_category not in valid_categories:
+                raise ValueError(f"utility_lookup archetype is only allowed with photo categories: document_text, health_medical, receipt_financial, screenshot_digital. Got {self.photo_category}")
+        return self
+
 
 # ---------------------------------------------------------------------------
 # Record-level extraction (spec Section 2.1)
@@ -138,6 +151,14 @@ class RecordExtraction(BaseModel):
         if len(v) > 3:
             raise ValueError("A record can have at most 3 episodes")
         return v
+        
+    @model_validator(mode="after")
+    def check_out_of_scope(self) -> "RecordExtraction":
+        if self.out_of_scope and self.episodes:
+            raise ValueError("episodes cannot exist when out_of_scope is true")
+        if self.out_of_scope and not self.out_of_scope_reason:
+            raise ValueError("out_of_scope_reason is required when out_of_scope is true")
+        return self
 
 
 # ---------------------------------------------------------------------------

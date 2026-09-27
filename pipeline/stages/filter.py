@@ -279,6 +279,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                 "specific_episode",
                                 "general_search_complaint",
                                 "success_or_tip",
+                                "believes_lost",
                             ):
                                 new_status = "filtered"
                                 counts["classified_relevant"] += 1
