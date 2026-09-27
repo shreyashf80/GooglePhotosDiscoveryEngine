@@ -1,10 +1,9 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { EnumLabel } from '@/components/EnumLabel'
-import { API_URL } from '@/lib/api'
+import { fetchApi } from '@/lib/api'
 
 export default async function HowItWorksPage() {
-  const litRes = await fetch(`${API_URL}/literature`, { next: { revalidate: 60 } })
-  const literature = await litRes.json()
+  const literature = await fetchApi<any[]>('/literature')
   
   // Group by era
   const grouped: Record<string, any[]> = {}

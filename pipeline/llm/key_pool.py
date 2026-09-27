@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+import random
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class KeyPool:
             _KeyState(index=i, key=k) for i, k in enumerate(keys)
         ]
         self._rpm_per_key = rpm_per_key
-        self._next_index = 0
+        self._next_index = random.randrange(len(self._keys))
         self._base_cooldown = 5.0  # seconds
         self._max_cooldown = 300.0  # 5 minutes max
 

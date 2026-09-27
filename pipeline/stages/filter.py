@@ -29,6 +29,7 @@ from pipeline.config import (
     KEYWORD_PREFILTER_ALL,
     PROMPTS_DIR,
     PROMPT_VERSION,
+    FILTER_PROMPT_VERSION,
     require_model_id,
 )
 from pipeline.db import engine
@@ -135,7 +136,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
         )
 
     # Load prompt template
-    prompt_path = PROMPTS_DIR / f"filter_{PROMPT_VERSION}.md"
+    prompt_path = PROMPTS_DIR / f"{FILTER_PROMPT_VERSION}.md"
     prompt_template = prompt_path.read_text()
 
     # Initialize LLM client
@@ -165,12 +166,6 @@ def run_filter(limit: Optional[int] = None) -> dict:
 
                 hit = check_keyword_hit(record_text)
 
-                # Update keyword_hit flag
-                conn.execute(
-                    text("UPDATE raw_records SET keyword_hit = :hit WHERE record_id = :id"),
-                    {"hit": hit, "id": record_id},
-                )
-
                 if hit:
                     counts["keyword_hit"] += 1
                     to_llm.append({
@@ -189,19 +184,36 @@ def run_filter(limit: Optional[int] = None) -> dict:
                     })
                 else:
                     # English without keyword hit → exclude without LLM
-                    conn.execute(
-                        text("""
-                            UPDATE raw_records
-                            SET status = 'excluded',
-                                relevance_class = 'irrelevant',
-                                relevance_reason = 'keyword_prefilter_miss',
-                                run_id = :run_id
-                            WHERE record_id = :id
-                        """),
-                        {"id": record_id, "run_id": run_id},
-                    )
-                    _delete_episodes_for_record(conn, record_id)
                     counts["keyword_miss_en_excluded"] += 1
+
+            # Bulk updates for keyword_hit and excluded
+            if counts["keyword_hit"] > 0 or len(to_llm) > 0:
+                conn.execute(
+                    text("UPDATE raw_records SET keyword_hit = true WHERE record_id = ANY(:ids)"),
+                    {"ids": [r["record_id"] for r in to_llm]}
+                )
+            # Need to get excluded ids
+            excluded_ids = [row.record_id for row in all_records if not check_keyword_hit(row.text or "") and (row.lang or "en") == "en"]
+            if excluded_ids:
+                conn.execute(
+                    text("UPDATE raw_records SET keyword_hit = false WHERE record_id = ANY(:ids)"),
+                    {"ids": excluded_ids}
+                )
+                conn.execute(
+                    text("""
+                        UPDATE raw_records
+                        SET status = 'excluded',
+                            relevance_class = 'irrelevant',
+                            relevance_reason = 'keyword_prefilter_miss',
+                            run_id = :run_id
+                        WHERE record_id = ANY(:ids)
+                    """),
+                    {"ids": excluded_ids, "run_id": run_id},
+                )
+                conn.execute(
+                    text("DELETE FROM episodes WHERE record_id = ANY(:ids)"),
+                    {"ids": excluded_ids}
+                )
 
         logger.info(
             "Filter: %d keyword hits, %d EN excluded, %d to LLM",
@@ -272,6 +284,9 @@ def run_filter(limit: Optional[int] = None) -> dict:
 
                 # Apply results to DB
                 with engine.begin() as conn:
+                    filtered_params = []
+                    excluded_params = []
+                    error_params = []
                     for r in batch:
                         rid = r["record_id"]
                         if rid in results_by_id:
@@ -292,47 +307,69 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                 "success_or_tip",
                                 "believes_lost",
                             ):
-                                new_status = "filtered"
-                                counts["classified_relevant"] += 1
-                            else:
-                                new_status = "excluded"
-                                counts["classified_excluded"] += 1
-
-                            conn.execute(
-                                text("""
-                                    UPDATE raw_records
-                                    SET status = :status,
-                                        relevance_class = :rel_class,
-                                        relevance_reason = :reason,
-                                        lang = :lang,
-                                        run_id = :run_id
-                                    WHERE record_id = :id
-                                """),
-                                {
-                                    "status": new_status,
+                                filtered_params.append({
+                                    "status": "filtered",
                                     "rel_class": rel_class,
                                     "reason": reason,
                                     "lang": lang,
                                     "id": rid,
                                     "run_id": run_id,
-                                },
-                            )
-                            if new_status == "excluded":
-                                _delete_episodes_for_record(conn, rid)
+                                })
+                                counts["classified_relevant"] += 1
+                            else:
+                                excluded_params.append({
+                                    "status": "excluded",
+                                    "rel_class": rel_class,
+                                    "reason": reason,
+                                    "lang": lang,
+                                    "id": rid,
+                                    "run_id": run_id,
+                                })
+                                counts["classified_excluded"] += 1
                         else:
-                            # Record not in response — mark as error
                             logger.warning("Filter: record %s missing from LLM response", rid)
-                            conn.execute(
-                                text("""
-                                    UPDATE raw_records
-                                    SET retry_count = COALESCE(retry_count, 0) + 1,
-                                        last_error = 'missing_from_llm_response',
-                                        run_id = :run_id
-                                    WHERE record_id = :id
-                                """),
-                                {"id": rid, "run_id": run_id},
-                            )
+                            error_params.append({"id": rid, "run_id": run_id})
                             counts["llm_errors"] += 1
+
+                    if filtered_params:
+                        conn.execute(
+                            text("""
+                                UPDATE raw_records
+                                SET status = :status,
+                                    relevance_class = :rel_class,
+                                    relevance_reason = :reason,
+                                    lang = :lang,
+                                    run_id = :run_id
+                                WHERE record_id = :id
+                            """),
+                            filtered_params,
+                        )
+                    if excluded_params:
+                        conn.execute(
+                            text("""
+                                UPDATE raw_records
+                                SET status = :status,
+                                    relevance_class = :rel_class,
+                                    relevance_reason = :reason,
+                                    lang = :lang,
+                                    run_id = :run_id
+                                WHERE record_id = :id
+                            """),
+                            excluded_params,
+                        )
+                        excluded_ids = [p["id"] for p in excluded_params]
+                        conn.execute(text("DELETE FROM episodes WHERE record_id = ANY(:ids)"), {"ids": excluded_ids})
+                    if error_params:
+                        conn.execute(
+                            text("""
+                                UPDATE raw_records
+                                SET retry_count = COALESCE(retry_count, 0) + 1,
+                                    last_error = 'missing_from_llm_response',
+                                    run_id = :run_id
+                                WHERE record_id = :id
+                            """),
+                            error_params,
+                        )
 
                 logger.info(
                     "Filter batch %d-%d: %d results processed",

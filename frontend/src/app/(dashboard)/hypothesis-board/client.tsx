@@ -139,8 +139,9 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
           {loading ? (
             <LoadingState />
           ) : details ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
                 <h4 className="font-semibold text-green-700 mb-3 border-b pb-1">Top Supporting Evidence</h4>
                 <div className="space-y-4">
                   {details.support_evidence?.map((ep: any) => (
@@ -192,7 +193,7 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
                 </div>
               </div>
             )}
-          </div>
+            </>
           ) : (
             <p className="text-sm text-red-500">Failed to load details.</p>
           )}

@@ -15,50 +15,46 @@ from pipeline.config import get_time_cutoff, APIFY_TOKEN
 from pipeline.sources.reddit import RedditSource
 from pipeline.sources.hn import HackerNewsSource
 from pipeline.sources.apple_support import AppleSupportSource
-from pipeline.cli import _upsert_records
 from pipeline.stages.dedup import run_dedup
 from pipeline.stages.language import run_language_detection
 from pipeline.stages.filter import run_filter
 from pipeline.stages.extract import run_extract
 from pipeline.stages.analyze import run_analyze
-from pipeline.db import execute_sql
+from pipeline.db import execute_sql, engine
+import json
+from sqlalchemy import text
+
+def _upsert_records(records: list):
+    if not records:
+        return
+    with engine.begin() as conn:
+        params_list = []
+        for r in records:
+            extra = json.dumps(r.extra) if r.extra else None
+            params_list.append({
+                "id": r.record_id, "source": r.source.value, "type": r.item_type.value,
+                "prod": r.product.value, "url": r.url, "hash": r.author_hash,
+                "dt": r.created_at, "txt": r.text, "ext": extra
+            })
+        if params_list:
+            conn.execute(
+                text("""
+                    INSERT INTO raw_records (record_id, source, item_type, product, url, author_hash, created_at, text, extra, status)
+                    VALUES (:id, :source, :type, :prod, :url, :hash, :dt, :txt, :ext, 'raw')
+                    ON CONFLICT (record_id) DO UPDATE SET
+                        text = CASE WHEN raw_records.status = 'raw' THEN EXCLUDED.text ELSE raw_records.text END,
+                        extra = EXCLUDED.extra
+                """),
+                params_list
+            )
+
 
 def main():
     cutoff = get_time_cutoff()
     
-    # 1. Fetch Apple Support
-    try:
-        logger.info("Fetching Apple Support...")
-        ap = AppleSupportSource()
-        ap_records = ap.fetch(cutoff, 40)
-        _upsert_records(ap_records)
-        logger.info(f"Inserted {len(ap_records)} Apple Support records.")
-    except Exception as e:
-        logger.error(f"Error with Apple Support: {e}")
-        
-    # 2. Fetch Hacker News
-    try:
-        logger.info("Fetching Hacker News...")
-        hn = HackerNewsSource()
-        hn_records = hn.fetch(cutoff, 300)
-        _upsert_records(hn_records)
-        logger.info(f"Inserted {len(hn_records)} HN records.")
-    except Exception as e:
-        logger.error(f"Error with HN: {e}")
-        
-    # 3. Fetch Reddit
-    apify_budget_remaining = 4.0
-    try:
-        logger.info("Fetching Reddit...")
-        rs = RedditSource(APIFY_TOKEN)
-        rs.remaining_budget = apify_budget_remaining
-        rs_records = rs.fetch(cutoff, 10000)
-        _upsert_records(rs_records)
-        apify_budget_remaining = rs.remaining_budget
-        logger.info(f"Inserted {len(rs_records)} Reddit records.")
-    except Exception as e:
-        logger.error(f"Error with Reddit: {e}")
-        
+    # Skip fetch steps as they are already done
+    apify_budget_remaining = 4.0 - 2.6  # Approx what was spent
+    
     # 4. Dedup and Language
     logger.info("Running dedup and language detection...")
     dedup_counts = run_dedup()
