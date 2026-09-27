@@ -43,6 +43,7 @@ GEMINI_EXTRACT_MODEL: str = os.getenv("GEMINI_EXTRACT_MODEL", "")
 GEMINI_CHAT_MODEL: str = os.getenv("GEMINI_CHAT_MODEL", "")
 GEMINI_RPM_PER_KEY: int = _env_int("GEMINI_RPM_PER_KEY", 15)
 PROMPT_VERSION: str = os.getenv("PROMPT_VERSION", "extract_v2")
+FILTER_PROMPT_VERSION: str = os.getenv("FILTER_PROMPT_VERSION", "filter_v2")
 
 
 def require_model_id(model_var: str) -> str:

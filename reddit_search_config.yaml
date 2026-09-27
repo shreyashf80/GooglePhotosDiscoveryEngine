@@ -1,28 +1,35 @@
-# Reddit search configuration v3
-
+# Reddit scaled winners and other apps
 reddit_wide_terms:
-  - '"google photos" find'
-  - '"google photos" "can''t find"'
-  - '"ask photos"'
+  "\"google photos\" \"can't find\"": 100
+  "\"google photos\" \"looking for\"": 50
 
 community_searches:
-  r/googlephotos: ["find", "search", "looking for", "ask photos", "screenshot", "whatsapp"]
-  r/GooglePixel: ['"google photos" search']
-  r/Android: ['"google photos" search']
-
-avoid_terms: ["deleted", "disappeared", "missing photos", "backup", "sync", "storage full", "recover"]
+  r/googlephotos:
+    "find": 60
+    "looking for": 60
+    "where is": 60
+    "old photo": 60
+  r/iphone:
+    "find a photo": 40
+    "can't find photo": 40
+    "photos search": 40
+  r/applehelp:
+    "find a photo": 40
+    "can't find photo": 40
+    "photos search": 40
+  r/ios:
+    "find a photo": 40
+    "can't find photo": 40
+    "photos search": 40
+  r/samsung:
+    "gallery search": 30
+    "find photo": 30
+  r/GalaxyS24:
+    "gallery search": 30
+    "find photo": 30
 
 tournament:
   searchPosts: true
   searchComments: true
   searchSort: "relevance"
   maxCommentsCount: 3
-
-
-# ---------------------------------------------------------------
-# Scale-up rule (after the tournament is filtered)
-# Keep a term if >= 15% of its posts are specific_episode or success_or_tip.
-# Drop a term if >= 50% of its posts are lost_not_hidden or irrelevant
-# and it produced 0 specific episodes.
-# For kept terms: maxPostsCount 50, searchComments true, maxCommentsCount 5.
-# ---------------------------------------------------------------

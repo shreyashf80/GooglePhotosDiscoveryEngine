@@ -1,1 +1,7 @@
-export default function PlaceholderPage() { return <div className="p-8">Placeholder</div> }
+import AskClient from './client';
+
+export const dynamic = 'force-dynamic';
+
+export default function AskPage() {
+  return <AskClient />;
+}

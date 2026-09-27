@@ -503,3 +503,51 @@ async def get_funnel_stats():
     res = await execute_query("SELECT * FROM funnel_stats")
     set_cached("funnel", res)
     return res
+
+
+@router.post("/chat")
+async def chat(request: Request):
+    """POST /api/v1/chat — RAG chat endpoint (FR-100 – FR-108)."""
+    from backend.services.rate_limiter import chat_rate_limiter
+    from backend.services.chat import handle_chat
+    from backend.main import embedding_model
+
+    # Rate limiting (FR-106)
+    client_ip = request.client.host if request.client else "unknown"
+    rate_result = chat_rate_limiter.check(client_ip)
+    if not rate_result.allowed:
+        return Response(
+            content=json.dumps({
+                "error": "Rate limit exceeded",
+                "retry_after_seconds": rate_result.retry_after_seconds,
+            }),
+            status_code=429,
+            media_type="application/json",
+        )
+
+    body = await request.json()
+    question = body.get("question", "").strip()
+    if not question:
+        return Response(
+            content=json.dumps({"error": "Question is required"}),
+            status_code=400,
+            media_type="application/json",
+        )
+
+    filters = body.get("filters")
+
+    try:
+        result = await handle_chat(
+            question=question,
+            embedding_model=embedding_model,
+            filters=filters,
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response(
+            content=json.dumps({"error": f"Chat failed: {str(e)}"}),
+            status_code=500,
+            media_type="application/json",
+        )
