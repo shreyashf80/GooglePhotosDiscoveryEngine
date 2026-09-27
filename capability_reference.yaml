@@ -28,15 +28,15 @@ cues:
     note: "Tester rated yes: 'after my trip' returned mostly trip photos. Adjusted to partial because results matched the concept 'trip', not the relation 'after'. Photos taken after the trip were not what came back."
 
   place_named:
-    searchable: yes
-    search: yes
-    ask_photos: yes
+    searchable: "yes"
+    search: "yes"
+    ask_photos: "yes"
     note: "'Pune' returned 2019 photos correctly. Recent Pune photos missing because they were not backed up."
 
   person_named:
-    searchable: yes
-    search: yes
-    ask_photos: yes
+    searchable: "yes"
+    search: "yes"
+    ask_photos: "yes"
     note: "Face recognized perfectly, 60+ photos. Requires the person to be labeled in Photos first (setup)."
 
   subject_object:
@@ -46,9 +46,9 @@ cues:
     note: "Tester rated yes. Adjusted to partial: common objects work ('car' 9 results with one false positive; 'cake' returned birthday photos), but 'medicine' returned nothing despite medicine and prescription photos on the device (possibly not backed up)."
 
   text_in_image:
-    searchable: yes
-    search: yes
-    ask_photos: yes
+    searchable: "yes"
+    search: "yes"
+    ask_photos: "yes"
     note: "Laptop receipt and barcode found; 'sign' returned signs, restaurant and ad boards. Caveat: the receipt had a caption added by the tester, which may have helped."
 
   source_sender:

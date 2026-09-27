@@ -8,10 +8,10 @@ export default function SegmentClient({ initialSegments, currentDimension }: { i
   const router = useRouter();
   
   const dimensions = [
-    { id: 'photo_category', label: 'Photo Category' },
+    { id: 'photo_group', label: 'Photo Category' },
     { id: 'photo_origin', label: 'Photo Origin' },
     { id: 'platform', label: 'Platform' },
-    { id: 'lang', label: 'Language' },
+    { id: 'language', label: 'Language' },
     { id: 'role_hints', label: 'Role Hints' },
     { id: 'product', label: 'Product' },
   ];
@@ -82,7 +82,7 @@ export default function SegmentClient({ initialSegments, currentDimension }: { i
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger className={`p-3 w-full rounded-md text-center border font-semibold flex flex-col justify-center items-center h-16 ${getHeatmapColor(gaveUpRate, count)}`}>
-                            <ClickableCount count={count} />
+                            <ClickableCount count={count} filters={{ archetype: arch, [currentDimension === 'photo_group' ? 'category' : currentDimension === 'language' ? 'lang' : currentDimension]: val }} />
                             {isAnecdotal && <span className="text-[10px] mt-1 opacity-70 font-normal uppercase tracking-wider">Anecdotal</span>}
                           </TooltipTrigger>
                           <TooltipContent>

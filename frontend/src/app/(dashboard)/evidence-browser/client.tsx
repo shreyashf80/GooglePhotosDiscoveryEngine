@@ -168,60 +168,102 @@ export default function EvidenceClient({ initialData, searchParams }: { initialD
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-4 rounded-md border grid grid-cols-4 gap-4 items-end">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Archetype</label>
-          <select className="w-full border rounded p-2 text-sm" value={searchParams.archetype || ''} onChange={e => updateFilter('archetype', e.target.value)}>
-            <option value="">All</option>
-            <option value="utility_lookup">Utility Lookup</option>
-            <option value="needle_in_flood">Needle in Flood</option>
-            <option value="provenance_lost">Provenance Lost</option>
-            <option value="refinement_dead_end">Refinement Dead End</option>
-            <option value="vocabulary_mismatch">Vocabulary Mismatch</option>
-            <option value="time_drift">Time Drift</option>
-            <option value="emergent">Emergent</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-          <select className="w-full border rounded p-2 text-sm" value={searchParams.category || ''} onChange={e => updateFilter('category', e.target.value)}>
-            <option value="">All</option>
-            <option value="document_text">Document/Text</option>
-            <option value="people_moment">People Moment</option>
-            <option value="pet_animal">Pet/Animal</option>
-            <option value="travel_place">Travel/Place</option>
-            <option value="meme_forward">Meme/Forward</option>
-            <option value="health_medical">Health/Medical</option>
-            <option value="other">Other</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Outcome</label>
-          <select className="w-full border rounded p-2 text-sm" value={searchParams.outcome || ''} onChange={e => updateFilter('outcome', e.target.value)}>
-            <option value="">All</option>
-            <option value="found_easily">Found Easily</option>
-            <option value="found_with_effort">Found With Effort</option>
-            <option value="still_searching">Still Searching</option>
-            <option value="gave_up">Gave Up</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </div>
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Search text</label>
+      <div className="bg-white p-4 rounded-md border space-y-4">
+        <div className="grid grid-cols-4 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Archetype</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.archetype || ''} onChange={e => updateFilter('archetype', e.target.value)}>
+              <option value="">All</option>
+              <option value="utility_lookup">Utility Lookup</option>
+              <option value="needle_in_flood">Needle in Flood</option>
+              <option value="provenance_lost">Provenance Lost</option>
+              <option value="refinement_dead_end">Refinement Dead End</option>
+              <option value="vocabulary_mismatch">Vocabulary Mismatch</option>
+              <option value="time_drift">Time Drift</option>
+              <option value="emergent">Emergent</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.category || ''} onChange={e => updateFilter('category', e.target.value)}>
+              <option value="">All</option>
+              <option value="document_text">Document/Text</option>
+              <option value="people_moment">People Moment</option>
+              <option value="pet_animal">Pet/Animal</option>
+              <option value="travel_place">Travel/Place</option>
+              <option value="meme_forward">Meme/Forward</option>
+              <option value="health_medical">Health/Medical</option>
+              <option value="other">Other</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Outcome</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.outcome || ''} onChange={e => updateFilter('outcome', e.target.value)}>
+              <option value="">All</option>
+              <option value="found_easily">Found Easily</option>
+              <option value="found_with_effort">Found With Effort</option>
+              <option value="still_searching">Still Searching</option>
+              <option value="gave_up">Gave Up</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Source</label>
             <input 
               type="text" 
               className="w-full border rounded p-2 text-sm" 
-              placeholder="Search summaries..." 
-              value={searchParams.search || ''} 
-              onChange={e => updateFilter('search', e.target.value)} 
+              placeholder="e.g. reddit" 
+              value={searchParams.source || ''} 
+              onChange={e => updateFilter('source', e.target.value)} 
             />
           </div>
-          <div className="pb-0 self-end">
-            <Button variant="outline" onClick={handleExport} className="w-full flex items-center justify-center gap-2">
-              <Download className="h-4 w-4" /> Export CSV
-            </Button>
+        </div>
+        <div className="grid grid-cols-4 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Hypothesis ID</label>
+            <input 
+              type="text" 
+              className="w-full border rounded p-2 text-sm" 
+              placeholder="e.g. H1" 
+              value={searchParams.hypothesis || ''} 
+              onChange={e => updateFilter('hypothesis', e.target.value)} 
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Hypothesis Direction</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.hypothesis_direction || ''} onChange={e => updateFilter('hypothesis_direction', e.target.value)}>
+              <option value="">Any</option>
+              <option value="support">Support</option>
+              <option value="contradict">Contradict</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Cue Type</label>
+            <input 
+              type="text" 
+              className="w-full border rounded p-2 text-sm" 
+              placeholder="e.g. visual_object" 
+              value={searchParams.cue_type || ''} 
+              onChange={e => updateFilter('cue_type', e.target.value)} 
+            />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Search text</label>
+              <input 
+                type="text" 
+                className="w-full border rounded p-2 text-sm" 
+                placeholder="Search summaries..." 
+                value={searchParams.search || ''} 
+                onChange={e => updateFilter('search', e.target.value)} 
+              />
+            </div>
+            <div className="pb-0 self-end">
+              <Button variant="outline" onClick={handleExport} className="w-full flex items-center justify-center gap-2">
+                <Download className="h-4 w-4" /> Export
+              </Button>
+            </div>
           </div>
         </div>
       </div>

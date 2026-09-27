@@ -19,9 +19,17 @@ export function EvidenceBadge({ strength }: { strength: string }) {
   )
 }
 
-export function ClickableCount({ count, param, value }: { count: number, param?: string, value?: string }) {
+export function ClickableCount({ count, param, value, filters }: { count: number, param?: string, value?: string, filters?: Record<string, string> }) {
   if (count === 0) return <span>0</span>
-  const href = param && value ? `/evidence-browser?${param}=${encodeURIComponent(value)}` : '/evidence-browser'
+  let href = '/evidence-browser'
+  const query = new URLSearchParams()
+  if (param && value) query.set(param, value)
+  if (filters) {
+    Object.entries(filters).forEach(([k, v]) => query.set(k, v))
+  }
+  const qStr = query.toString()
+  if (qStr) href += `?${qStr}`
+  
   return (
     <Link href={href} className="text-blue-600 hover:underline font-medium">
       {count}

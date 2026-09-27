@@ -210,7 +210,11 @@ async def list_episodes(
     outcome: Optional[str] = None,
     stakes: Optional[str] = None,
     confidence: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    source: Optional[str] = None,
+    hypothesis: Optional[str] = None,
+    hypothesis_direction: Optional[str] = None,
+    cue_type: Optional[str] = None
 ):
     where = []
     params = {}
@@ -236,6 +240,19 @@ async def list_episodes(
     if search:
         where.append("e.summary_en ILIKE :search")
         params["search"] = f"%{search}%"
+    if source:
+        where.append("r.source = :source")
+        params["source"] = source
+    if hypothesis:
+        sub_where = ["he.episode_id = e.episode_id", "he.hypothesis_id = :hypothesis"]
+        params["hypothesis"] = hypothesis
+        if hypothesis_direction:
+            sub_where.append("he.direction = :hypothesis_direction")
+            params["hypothesis_direction"] = hypothesis_direction
+        where.append(f"EXISTS (SELECT 1 FROM hypothesis_evidence he WHERE {' AND '.join(sub_where)})")
+    if cue_type:
+        where.append("EXISTS (SELECT 1 FROM episode_cues ec WHERE ec.episode_id = e.episode_id AND ec.cue_type = :cue_type)")
+        params["cue_type"] = cue_type
         
     where_clause = "WHERE " + " AND ".join(where) if where else ""
     
@@ -276,7 +293,11 @@ async def export_episodes(
     outcome: Optional[str] = None,
     stakes: Optional[str] = None,
     confidence: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    source: Optional[str] = None,
+    hypothesis: Optional[str] = None,
+    hypothesis_direction: Optional[str] = None,
+    cue_type: Optional[str] = None
 ):
     where = []
     params = {}
@@ -302,6 +323,19 @@ async def export_episodes(
     if search:
         where.append("e.summary_en ILIKE :search")
         params["search"] = f"%{search}%"
+    if source:
+        where.append("r.source = :source")
+        params["source"] = source
+    if hypothesis:
+        sub_where = ["he.episode_id = e.episode_id", "he.hypothesis_id = :hypothesis"]
+        params["hypothesis"] = hypothesis
+        if hypothesis_direction:
+            sub_where.append("he.direction = :hypothesis_direction")
+            params["hypothesis_direction"] = hypothesis_direction
+        where.append(f"EXISTS (SELECT 1 FROM hypothesis_evidence he WHERE {' AND '.join(sub_where)})")
+    if cue_type:
+        where.append("EXISTS (SELECT 1 FROM episode_cues ec WHERE ec.episode_id = e.episode_id AND ec.cue_type = :cue_type)")
+        params["cue_type"] = cue_type
         
     where_clause = "WHERE " + " AND ".join(where) if where else ""
 
@@ -387,7 +421,7 @@ async def get_how_it_works():
 
 @router.get("/segments")
 async def get_segments(dimension: str):
-    allowed = ["photo_category", "photo_origin", "platform", "lang", "role_hints", "product"]
+    allowed = ["photo_group", "photo_origin", "platform", "language", "role_hints", "product"]
     if dimension not in allowed:
         return {"error": "Invalid dimension"}
         
@@ -403,18 +437,30 @@ async def get_handoff():
     cached = get_cached("handoff")
     if cached: return cached
     
-    drafts, d1, d3 = await asyncio.gather(
+    drafts, d1, d3, top_segments_rows, contradicted = await asyncio.gather(
         execute_query("SELECT * FROM research_handoff"),
         execute_query("SELECT hypothesis_id, title, status FROM hypotheses WHERE evidence_strength IN ('directional', 'strong')"),
-        fetch_one("SELECT archetype, opportunity_score FROM archetype_stats ORDER BY opportunity_score DESC LIMIT 1")
+        fetch_one("SELECT archetype, opportunity_score FROM archetype_stats ORDER BY opportunity_score DESC LIMIT 1"),
+        execute_query("SELECT dimension, value, archetype FROM segment_stats WHERE episode_count >= 10 ORDER BY episode_count DESC LIMIT 3"),
+        execute_query("SELECT title FROM hypotheses WHERE status = 'contradicted'")
     )
     
+    if top_segments_rows:
+        d2 = ", ".join(f"{row['archetype']} in {row['dimension']}={row['value']}" for row in top_segments_rows)
+    else:
+        d2 = "Not enough data yet"
+        
+    if contradicted:
+        d4 = ", ".join(row["title"] for row in contradicted)
+    else:
+        d4 = "None yet"
+        
     res = {
         "decisions": {
             "D1": d1,
-            "D2": "See top segments in segment explorer",
+            "D2": d2,
             "D3": d3["archetype"] if d3 else "Unknown",
-            "D4": "Hypotheses contradicted by data"
+            "D4": d4
         },
         "drafts": drafts
     }

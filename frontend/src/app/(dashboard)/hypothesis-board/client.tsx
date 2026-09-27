@@ -104,7 +104,7 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
             <p className="text-sm text-gray-600">{hypothesis.statement}</p>
           </div>
           <div className="text-right text-sm">
-            <div><span className="text-gray-500">Relevant:</span> <ClickableCount count={hypothesis.relevant_count} /></div>
+            <div><span className="text-gray-500">Relevant:</span> <ClickableCount count={hypothesis.relevant_count} filters={{ hypothesis: hypothesis.hypothesis_id }} /></div>
           </div>
         </div>
       </CardHeader>
@@ -122,13 +122,13 @@ function HypothesisCard({ hypothesis }: { hypothesis: any }) {
            {isAnecdotal ? (
              <div className="flex flex-col items-center gap-1 text-sm mb-2 text-gray-500">
                 <div className="w-full h-2 bg-gray-200 rounded" />
-                <span className="italic">Too few episodes to judge ({hypothesis.support_count} for, {hypothesis.contradict_count} against)</span>
+                <span className="italic flex gap-1">Too few episodes to judge (<ClickableCount count={hypothesis.support_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'support' }} /> for, <ClickableCount count={hypothesis.contradict_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'contradict' }} /> against)</span>
              </div>
            ) : (
              <div className="flex items-center gap-4 text-sm mb-2">
-                <span className="text-green-700 font-medium">Support: {hypothesis.support_count}</span>
+                <span className="text-green-700 font-medium flex gap-1">Support: <ClickableCount count={hypothesis.support_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'support' }} /></span>
                 <Progress value={supportPercent} className="h-2 flex-1 [&>div]:bg-green-500 bg-red-100" />
-                <span className="text-red-700 font-medium">Contradict: {hypothesis.contradict_count}</span>
+                <span className="text-red-700 font-medium flex gap-1">Contradict: <ClickableCount count={hypothesis.contradict_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'contradict' }} /></span>
              </div>
            )}
         </CardContent>

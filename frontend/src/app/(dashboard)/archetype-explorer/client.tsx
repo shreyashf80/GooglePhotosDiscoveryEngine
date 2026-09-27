@@ -72,9 +72,12 @@ export default function ArchetypeClient({ initialArchetypes, comparison, current
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">{Math.round(arch.opportunity_score)}</div>
-                    <div className="text-xs text-gray-500">Score</div>
+                  <div className="text-right flex flex-col items-end">
+                    <div className="text-2xl font-bold flex items-baseline gap-2">
+                      {Math.round(arch.opportunity_score)}
+                      <span className="text-[11px] font-normal text-gray-400">based on {arch.episode_count} episodes</span>
+                    </div>
+                    <div className="text-xs text-gray-500">Opportunity Score</div>
                   </div>
                   <EvidenceBadge strength={arch.evidence_strength} />
                 </div>

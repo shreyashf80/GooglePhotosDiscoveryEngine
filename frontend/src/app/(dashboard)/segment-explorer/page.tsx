@@ -11,7 +11,7 @@ async function SegmentData({ dimension }: { dimension: string }) {
 }
 
 export default function SegmentExplorerPage({ searchParams }: { searchParams: { dimension?: string } }) {
-  const dimension = searchParams.dimension || 'photo_category';
+  const dimension = searchParams.dimension || 'photo_group';
   
   return (
     <div className="space-y-6">

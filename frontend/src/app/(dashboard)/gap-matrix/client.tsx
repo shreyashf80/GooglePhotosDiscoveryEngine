@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EnumLabel } from '@/components/EnumLabel'
+import { ClickableCount } from '@/components/shared/components'
 
 export default function GapMatrixClient({ data }: { data: any[] }) {
   const [sortCol, setSortCol] = useState<string>('gap_score')
@@ -136,7 +137,7 @@ export default function GapMatrixClient({ data }: { data: any[] }) {
                         />
                       </div>
                     </div>
-                    <span className="ml-4 font-bold w-12 text-right">{d.forgotten_count}</span>
+                    <span className="ml-4 font-bold w-12 text-right"><ClickableCount count={d.forgotten_count} filters={{ cue_type: d.cue_type }} /></span>
                   </div>
                 ))}
               </div>
