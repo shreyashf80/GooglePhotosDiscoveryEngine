@@ -22,6 +22,7 @@ class RelevanceClass(StrEnum):
     SUCCESS_OR_TIP = "success_or_tip"
     BELIEVES_LOST = "believes_lost"
     LOST_NOT_HIDDEN = "lost_not_hidden"
+    ADJACENT_FINDABILITY = "adjacent_findability"
     IRRELEVANT = "irrelevant"
 
 

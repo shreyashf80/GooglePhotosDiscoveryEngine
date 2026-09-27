@@ -1,3 +1,5 @@
+> **NOTE:** This document is overridden by `docs/change_spec_listening_v2.md`.
+
 # Architecture: Recall Gap Discovery Engine
 
 | Field | Value |

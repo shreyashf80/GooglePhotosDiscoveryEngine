@@ -1,3 +1,5 @@
+> **NOTE:** This document is overridden by `docs/change_spec_listening_v2.md`.
+
 # Spec: Relevance Classification, Episode Extraction and Taxonomy
 
 Version 1.0 | Google Photos Memory-Based Retrieval Discovery Engine

@@ -306,6 +306,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                 "general_search_complaint",
                                 "success_or_tip",
                                 "believes_lost",
+                                "adjacent_findability",
                             ):
                                 filtered_params.append({
                                     "status": "filtered",
@@ -313,6 +314,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                     "reason": reason,
                                     "lang": lang,
                                     "id": rid,
+                                    "scope": "core" if rel_class in ["specific_episode", "general_search_complaint", "success_or_tip", "believes_lost"] else "adjacent" if rel_class == "adjacent_findability" else "out",
                                     "run_id": run_id,
                                 })
                                 counts["classified_relevant"] += 1
@@ -323,6 +325,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                     "reason": reason,
                                     "lang": lang,
                                     "id": rid,
+                                    "scope": "core" if rel_class in ["specific_episode", "general_search_complaint", "success_or_tip", "believes_lost"] else "adjacent" if rel_class == "adjacent_findability" else "out",
                                     "run_id": run_id,
                                 })
                                 counts["classified_excluded"] += 1
@@ -339,7 +342,8 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                     relevance_class = :rel_class,
                                     relevance_reason = :reason,
                                     lang = :lang,
-                                    run_id = :run_id
+                                    run_id = :run_id,
+                                    scope = :scope
                                 WHERE record_id = :id
                             """),
                             filtered_params,
@@ -352,7 +356,8 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                     relevance_class = :rel_class,
                                     relevance_reason = :reason,
                                     lang = :lang,
-                                    run_id = :run_id
+                                    run_id = :run_id,
+                                    scope = :scope
                                 WHERE record_id = :id
                             """),
                             excluded_params,

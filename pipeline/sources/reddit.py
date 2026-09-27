@@ -25,7 +25,8 @@ class RedditSource(SourceBase):
     def __init__(self, token: str):
         self.client = ApifyClient(token)
         self.errors = []
-        self.remaining_budget = 4.0
+        # Free tier is 5.0, margin is 0.50
+        self.remaining_budget = 4.5
         
     def _run_apify(self, run_input, term_str, community, since):
         local_records = []

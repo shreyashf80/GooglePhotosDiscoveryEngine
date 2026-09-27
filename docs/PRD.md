@@ -1,3 +1,5 @@
+> **NOTE:** This document is overridden by `docs/change_spec_listening_v2.md` regarding ingestion, filtering, themes, and hypotheses.
+
 # PRD: Recall Gap, an AI Discovery Engine for Memory-Based Photo Retrieval
 
 | Field | Value |
@@ -35,8 +37,8 @@ The PM needs a system that turns individual posts into structured **retrieval ep
 ### 3.1 Goals
 - **G1.** Convert public posts from multiple sources and languages into structured retrieval episodes with traceable evidence.
 - **G2.** Answer the project's research questions with counts and quotes: what photos are hard to retrieve, what users remember, what they forget, how they form queries, where the experience breaks, which segments are affected.
-- **G3.** Compare retrieval problem types (archetypes) and rank opportunity areas with a transparent scoring formula.
-- **G4.** Evaluate 8 starting hypotheses with supporting and contradicting evidence, and surface emergent patterns not in the hypothesis list.
+- **G3.** Compare problem types (themes) and rank areas bottom-up from signals.
+- **G4.** Generate and evaluate data-derived hypotheses from signals instead of predefined ones.
 - **G5.** Produce a clear handoff to Part 2: which hypotheses to test, which segments to recruit, which archetype to go deep on, and what to drop.
 - **G6.** Let a mentor or evaluator understand how the tool works and trust its output within 3 minutes.
 - **G7.** Run entirely on free tiers.
@@ -89,7 +91,7 @@ The PM needs a system that turns individual posts into structured **retrieval ep
 |---|---|---|---|
 | Sources | Reddit, Play Store, App Store, YouTube | Google Photos Community forum, Hacker News, competitor data (Samsung Gallery Play reviews, Apple Photos Reddit discussions) | Anything else |
 | Pipeline | Ingest, dedup, relevance filter, extraction, embedding, analysis | Literature ingestion, golden set evaluation, emergent label review | Agentic hypothesis loop |
-| Pages | Overview, Hypothesis board, Gap matrix, Archetype explorer, Evidence browser, Ask the corpus, How it works | Segment explorer, Research handoff | Custom report builder |
+| Pages | Overview, Hypothesis board, Gap matrix, Themes, Evidence browser, Ask the corpus, How it works | Segment explorer, Research handoff | Custom report builder |
 | Platform | Password gate, deploy to Vercel + Railway + Neon | CSV export, chat rate limiting dashboard | Scheduled pipeline runs |
 
 Note on competitors: Apple Photos is built into iOS and has no App Store reviews, so Apple Photos evidence comes from Reddit discussions only.
