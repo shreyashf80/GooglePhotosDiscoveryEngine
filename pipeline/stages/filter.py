@@ -204,7 +204,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                         UPDATE raw_records
                         SET status = 'excluded',
                             relevance_class = 'irrelevant',
-                            relevance_reason = 'keyword_prefilter_miss',
+                            exclusion_reason = 'no_keyword',
                             run_id = :run_id
                         WHERE record_id = ANY(:ids)
                     """),
@@ -326,6 +326,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                     "lang": lang,
                                     "id": rid,
                                     "scope": "core" if rel_class in ["specific_episode", "general_search_complaint", "success_or_tip", "believes_lost"] else "adjacent" if rel_class == "adjacent_findability" else "out",
+                                    "exclusion_reason": "llm_irrelevant" if rel_class == "irrelevant" else "lost_not_hidden" if rel_class == "lost_not_hidden" else None,
                                     "run_id": run_id,
                                 })
                                 counts["classified_excluded"] += 1
@@ -355,6 +356,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
                                 SET status = :status,
                                     relevance_class = :rel_class,
                                     relevance_reason = :reason,
+                                    exclusion_reason = :exclusion_reason,
                                     lang = :lang,
                                     run_id = :run_id,
                                     scope = :scope

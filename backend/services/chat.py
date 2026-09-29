@@ -135,11 +135,12 @@ async def retrieve_episodes(
     limit: int = 12,
     filters: dict | None = None,
 ) -> list[dict]:
-    """Retrieve top episodes by cosine similarity, excluding duplicates and out-of-scope."""
+    """Retrieve top signals by cosine similarity, excluding duplicates and out-of-scope."""
     embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
     where_clauses = [
-        "e.embedding IS NOT NULL",
+        "s.embedding IS NOT NULL",
+        "s.is_signal = true",
     ]
     params: dict[str, Any] = {"emb": embedding_str, "lim": limit}
 
@@ -148,11 +149,17 @@ async def retrieve_episodes(
             where_clauses.append("r.source = :source")
             params["source"] = filters["source"]
         if filters.get("product"):
-            where_clauses.append("r.product = :product")
+            where_clauses.append("s.product = :product")
             params["product"] = filters["product"]
-        if filters.get("archetype"):
-            where_clauses.append("e.archetype_primary = :archetype")
-            params["archetype"] = filters["archetype"]
+        if filters.get("scope"):
+            where_clauses.append("r.scope = :scope")
+            params["scope"] = filters["scope"]
+        if filters.get("theme"):
+            where_clauses.append("EXISTS (SELECT 1 FROM signal_reasons sr JOIN themes t ON sr.theme_id = t.id WHERE sr.signal_id = s.signal_id AND t.name = :theme)")
+            params["theme"] = filters["theme"]
+        if filters.get("theme_id"):
+            where_clauses.append("EXISTS (SELECT 1 FROM signal_reasons sr WHERE sr.signal_id = s.signal_id AND sr.theme_id = :theme_id)")
+            params["theme_id"] = filters["theme_id"]
         if filters.get("lang"):
             where_clauses.append("r.lang = :lang")
             params["lang"] = filters["lang"]
@@ -161,26 +168,24 @@ async def retrieve_episodes(
 
     query = f"""
         SELECT
-            e.episode_id,
-            e.summary_en,
-            e.quote_en,
-            e.quote_original,
-            e.archetype_primary,
-            e.outcome,
-            e.photo_category,
-            e.target_description,
-            e.failure_modes,
-            e.workarounds,
-            e.stakes,
+            s.signal_id,
+            s.summary_en as summary,
+            s.quote_en as quote,
+            s.quote_original,
+            (SELECT t.name FROM themes t JOIN signal_reasons sr ON sr.theme_id = t.id WHERE sr.signal_id = s.signal_id LIMIT 1) as theme,
+            r.scope,
+            r.relevance_class,
             r.source,
             r.url,
+            s.remembered,
+            s.forgot as forgotten,
             r.created_at,
             r.lang,
-            1 - (e.embedding <=> CAST(:emb AS halfvec(384))) as similarity
-        FROM episodes e
-        JOIN raw_records r ON e.record_id = r.record_id
+            1 - (s.embedding <=> CAST(:emb AS halfvec(384))) as similarity
+        FROM signals s
+        JOIN raw_records r ON s.record_id = r.record_id
         WHERE {where_sql}
-        ORDER BY e.embedding <=> CAST(:emb AS halfvec(384))
+        ORDER BY s.embedding <=> CAST(:emb AS halfvec(384))
         LIMIT :lim
     """
 
@@ -194,7 +199,7 @@ async def retrieve_episodes(
         if sim < EPISODE_SIMILARITY_THRESHOLD:
             continue
         # Deduplicate by summary
-        summary_key = row["summary_en"][:100].lower().strip()
+        summary_key = row["summary"][:100].lower().strip()
         if summary_key in seen_summaries:
             continue
         seen_summaries.add(summary_key)
@@ -244,64 +249,45 @@ async def retrieve_literature(
 # ── Step 4: Fetch precomputed stats snapshot ─────────────────────────────────
 async def get_stats_snapshot() -> dict:
     """Fetch a compact snapshot of precomputed stats for counting questions (FR-103)."""
-    archetype_stats, hypothesis_stats, funnel_stats, gap_stats = (
-        await execute_query("SELECT archetype, episode_count, outcome_distribution, opportunity_score, evidence_strength FROM archetype_stats ORDER BY opportunity_score DESC"),
-        await execute_query("SELECT hypothesis_id, title, status, support_count, contradict_count, evidence_strength FROM hypotheses ORDER BY hypothesis_id"),
-        await execute_query("SELECT stage, episode_count, gave_up_rate FROM funnel_stats"),
-        await execute_query("SELECT cue_type, gap_score, remembered_share FROM cue_stats WHERE gap_score IS NOT NULL ORDER BY gap_score DESC LIMIT 5"),
+    theme_stats, hypothesis_stats = (
+        await execute_query("SELECT name, rank_score, signals as signal_count, scope, evidence_strength FROM themes ORDER BY rank_score DESC LIMIT 20"),
+        await execute_query("SELECT h.statement, t.scope, h.details->>'stage' as primary_funnel_stage, h.details->>'why' as why_we_believe_it, h.details->>'counter' as counter_evidence FROM hypotheses h JOIN themes t ON h.theme_id = t.id WHERE h.origin = 'data_derived'"),
     )
 
-    # Compute total episodes
-    total_eps = await fetch_one("SELECT count(*) as c FROM episodes")
-    total_gave_up = await fetch_one("SELECT count(*) as c FROM episodes WHERE outcome = 'gave_up'")
-    total_found_effort = await fetch_one("SELECT count(*) as c FROM episodes WHERE outcome = 'found_with_effort'")
-    total_still_searching = await fetch_one("SELECT count(*) as c FROM episodes WHERE outcome = 'still_searching'")
-    total_found_easily = await fetch_one("SELECT count(*) as c FROM episodes WHERE outcome = 'found_easily'")
+    # Compute total signals by scope
+    total_core = await fetch_one("SELECT count(*) as c FROM signals s JOIN raw_records r ON s.record_id = r.record_id WHERE s.is_signal = true AND r.scope = 'core'")
+    total_adjacent = await fetch_one("SELECT count(*) as c FROM signals s JOIN raw_records r ON s.record_id = r.record_id WHERE s.is_signal = true AND r.scope = 'adjacent'")
+    dropped = await fetch_one("SELECT count(*) as c FROM signals WHERE is_signal = false")
+    
+    # Outcome counts from signals
+    outcome_counts_rows = await execute_query("SELECT outcome, count(*) as count FROM signals WHERE is_signal = true AND outcome IS NOT NULL GROUP BY outcome")
+    outcome_counts = {row["outcome"]: row["count"] for row in outcome_counts_rows}
 
     return {
-        "total_episodes": total_eps["c"] if total_eps else 0,
-        "outcome_counts": {
-            "gave_up": total_gave_up["c"] if total_gave_up else 0,
-            "found_with_effort": total_found_effort["c"] if total_found_effort else 0,
-            "still_searching": total_still_searching["c"] if total_still_searching else 0,
-            "found_easily": total_found_easily["c"] if total_found_easily else 0,
-        },
-        "archetypes": [
+        "total_signals": (total_core["c"] if total_core else 0) + (total_adjacent["c"] if total_adjacent else 0),
+        "total_core_signals": total_core["c"] if total_core else 0,
+        "total_adjacent_signals": total_adjacent["c"] if total_adjacent else 0,
+        "dropped_at_signals": dropped["c"] if dropped else 0,
+        "outcome_counts": outcome_counts,
+        "themes": [
             {
-                "name": a["archetype"],
-                "count": a["episode_count"],
-                "outcome_distribution": a["outcome_distribution"],
-                "opportunity_score": float(a["opportunity_score"]) if a["opportunity_score"] else 0,
-                "evidence_strength": a["evidence_strength"],
+                "name": t["name"],
+                "rank_score": float(t["rank_score"]) if t["rank_score"] else 0,
+                "signal_count": t["signal_count"],
+                "scope": t["scope"],
+                "evidence_strength": t["evidence_strength"],
             }
-            for a in archetype_stats
+            for t in theme_stats
         ],
         "hypotheses": [
             {
-                "id": h["hypothesis_id"],
-                "title": h["title"],
-                "status": h["status"],
-                "support": h["support_count"],
-                "contradict": h["contradict_count"],
-                "strength": h["evidence_strength"],
+                "statement": h["statement"],
+                "scope": h["scope"],
+                "primary_funnel_stage": h["primary_funnel_stage"],
+                "why_we_believe_it": h["why_we_believe_it"],
+                "counter_evidence": h["counter_evidence"],
             }
             for h in hypothesis_stats
-        ],
-        "funnel": [
-            {
-                "stage": f["stage"],
-                "episodes": f["episode_count"],
-                "gave_up_rate": float(f["gave_up_rate"]) if f["gave_up_rate"] else 0,
-            }
-            for f in funnel_stats
-        ],
-        "top_gaps": [
-            {
-                "cue": g["cue_type"],
-                "gap_score": float(g["gap_score"]) if g["gap_score"] else 0,
-                "remembered_share": float(g["remembered_share"]) if g["remembered_share"] else 0,
-            }
-            for g in gap_stats
         ],
     }
 
@@ -327,17 +313,22 @@ def generate_answer(
             except Exception:
                 date_str = str(ep.get("created_at", ""))
         parts = [
-            f"[E{i}] Episode: {ep['summary_en']}",
-            f"  Quote (EN): \"{ep['quote_en']}\"",
+            f"[E{i}] Signal: {ep.get('summary', 'unknown')}",
+            f"  Quote (EN): \"{ep.get('quote', 'unknown')}\"",
         ]
-        if ep.get("quote_original") and ep["quote_original"] != ep["quote_en"]:
+        if ep.get("quote_original") and ep["quote_original"] != ep.get("quote"):
             parts.append(f"  Quote (original): \"{ep['quote_original']}\"")
         parts.extend([
-            f"  Archetype: {ep.get('archetype_primary', 'unknown')}",
-            f"  Outcome: {ep.get('outcome', 'unknown')}",
+            f"  Theme: {ep.get('theme', 'unknown')}",
+            f"  Scope: {ep.get('scope', 'unknown')}",
+            f"  Relevance Class: {ep.get('relevance_class', 'unknown')}",
             f"  Source: {ep.get('source', 'unknown')}",
             f"  Date: {date_str}",
         ])
+        if ep.get("remembered"):
+            parts.append(f"  Remembered Cues: {ep['remembered']}")
+        if ep.get("forgotten"):
+            parts.append(f"  Forgotten Cues: {ep['forgotten']}")
         episode_context_parts.append("\n".join(parts))
 
     # Build literature context
@@ -354,27 +345,27 @@ def generate_answer(
     stats_text = json.dumps(stats, indent=None, default=str)
 
     system = f"""You are a research assistant answering questions about user photo retrieval experiences.
-You answer ONLY from the provided context (episodes and research). Never invent information.
+You answer ONLY from the provided context (signals and research). Never invent information.
 
 CITATION RULES:
-- Cite episodes as [E1], [E2], etc. inline in your answer.
+- Cite signals as [E1], [E2], etc. inline in your answer.
 - Cite research as [R1], [R2], etc. inline in your answer.
 - Every factual claim must have at least one citation.
 - Only use citation IDs that exist in the provided context.
 
 STATS RULES:
 - For "how many" or counting questions, use the PRECOMPUTED STATS section below.
-- When using stats numbers, explicitly state: "According to precomputed stats across all {stats.get('total_episodes', 0)} episodes, ..."
-- Do NOT count from the retrieved episodes sample for aggregate numbers.
+- When using stats numbers, explicitly state: "According to precomputed stats across all {stats.get('total_signals', 0)} signals, ..."
+- Do NOT count from the retrieved signals sample for aggregate numbers.
 
-{"IMPORTANT: There is not enough user evidence (fewer than 3 relevant episodes found). State this clearly. If research citations are available, share relevant research findings." if insufficient_evidence else ""}
+{"IMPORTANT: There is not enough user evidence (fewer than 3 relevant signals found). State this clearly. If research citations are available, share relevant research findings." if insufficient_evidence else ""}
 
 Answer concisely but thoroughly. Use plain language suitable for a PM audience."""
 
     prompt_parts = [f"Question: {question}", f"Rewritten search query: {rewritten_query}"]
 
     if episode_context_parts:
-        prompt_parts.append("\n--- USER EPISODES ---\n" + "\n\n".join(episode_context_parts))
+        prompt_parts.append("\n--- USER SIGNALS ---\n" + "\n\n".join(episode_context_parts))
 
     if lit_context_parts:
         prompt_parts.append("\n--- RESEARCH ---\n" + "\n\n".join(lit_context_parts))
@@ -450,9 +441,9 @@ async def cache_response(question: str, response: dict) -> None:
     await execute_query(
         """
         INSERT INTO chat_cache (question_hash, response, created_at)
-        VALUES (:qhash, :response::jsonb, NOW())
+        VALUES (:qhash, CAST(:response AS jsonb), NOW())
         ON CONFLICT (question_hash)
-        DO UPDATE SET response = :response::jsonb, created_at = NOW()
+        DO UPDATE SET response = CAST(:response AS jsonb), created_at = NOW()
         """,
         {"qhash": qhash, "response": response_json},
     )
@@ -519,13 +510,13 @@ async def handle_chat(
                     date_str = ""
             cit: dict[str, Any] = {
                 "id": citation_id,
-                "episode_id": ep["episode_id"],
-                "quote_en": ep["quote_en"],
+                "signal_id": ep["signal_id"],
+                "quote_en": ep.get("quote", ""),
                 "source": ep.get("source", ""),
                 "url": ep.get("url", ""),
                 "date": date_str,
             }
-            if ep.get("quote_original") and ep["quote_original"] != ep["quote_en"]:
+            if ep.get("quote_original") and ep["quote_original"] != ep.get("quote"):
                 cit["quote_original"] = ep["quote_original"]
             citations.append(cit)
 

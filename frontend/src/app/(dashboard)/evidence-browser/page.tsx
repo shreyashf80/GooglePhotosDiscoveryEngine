@@ -7,8 +7,9 @@ export const revalidate = 300;
 
 async function EvidenceData({ searchParams }: { searchParams: Record<string, string> }) {
   const params = new URLSearchParams(searchParams as Record<string, string>);
-  const data = await fetchApi<any>(`/episodes?${params.toString()}`)
-  return <EvidenceClient initialData={data} searchParams={searchParams} />
+  const data = await fetchApi<any>(`/signals?${params.toString()}`);
+  const themes = await fetchApi<any[]>('/themes').catch(() => []);
+  return <EvidenceClient initialData={data} themes={themes} searchParams={searchParams} />
 }
 
 export default function EvidenceBrowserPage({ searchParams }: { searchParams: Record<string, string> }) {

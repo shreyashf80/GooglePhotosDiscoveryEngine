@@ -11,14 +11,14 @@ export function PipelineFunnelChart({ data }: { data: any[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Pipeline Funnel</CardTitle>
-        <p className="text-sm text-gray-500">Volume of records moving from raw data to extracted episodes.</p>
+        <p className="text-sm text-gray-500">Volume of records through Listening V2 stages.</p>
       </CardHeader>
       <CardContent className="h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ left: 40, right: 20 }}>
+          <BarChart data={data} layout="vertical" margin={{ left: 120, right: 20 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" />
-            <YAxis dataKey="name" type="category" width={80} />
+            <YAxis dataKey="name" type="category" width={110} />
             <RechartsTooltip />
             <Bar dataKey="value" fill="#3b82f6" />
           </BarChart>
@@ -28,26 +28,22 @@ export function PipelineFunnelChart({ data }: { data: any[] }) {
   )
 }
 
-export function RetrievalFunnelChart({ data }: { data: any[] }) {
+export function BreakdownChart({ title, description, data }: { title: string, description: string, data: any[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Retrieval Funnel Failures</CardTitle>
-        <p className="text-sm text-gray-500">Episodes ending in each failure stage, and the resulting user gave-up rate.</p>
+        <CardTitle>{title}</CardTitle>
+        <p className="text-sm text-gray-500">{description}</p>
       </CardHeader>
-      <CardContent className="h-80">
+      <CardContent className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+          <BarChart data={data} layout="vertical" margin={{ left: 100, right: 20 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis yAxisId="left" />
-            <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v}%`} />
+            <XAxis type="number" />
+            <YAxis dataKey="name" type="category" width={90} />
             <RechartsTooltip />
-            <Legend />
-            <Bar yAxisId="left" dataKey="Episodes" stackId="a" fill="#8b5cf6" />
-            <Bar yAxisId="left" dataKey="Complaints" stackId="a" fill="#c4b5fd" />
-            <Line yAxisId="right" type="step" dataKey="GaveUpRate" name="Gave Up %" stroke="none" dot={{ stroke: '#ef4444', strokeWidth: 2, r: 4, fill: '#ef4444' }} label={{ position: 'top', fill: '#ef4444', formatter: (v: any) => `${v}%` }} />
-          </ComposedChart>
+            <Bar dataKey="value" fill="#10b981" />
+          </BarChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>

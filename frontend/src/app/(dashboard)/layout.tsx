@@ -5,9 +5,9 @@ export const revalidate = 300;
 
 const navItems = [
   { name: 'Overview', href: '/' },
+  { name: 'Themes', href: '/themes' },
   { name: 'Hypothesis board', href: '/hypothesis-board' },
   { name: 'Gap matrix', href: '/gap-matrix' },
-  { name: 'Archetype explorer', href: '/archetype-explorer' },
   { name: 'Segment explorer', href: '/segment-explorer', p1: true },
   { name: 'Evidence browser', href: '/evidence-browser' },
   { name: 'Ask the corpus', href: '/ask' },

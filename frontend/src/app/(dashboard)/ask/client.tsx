@@ -5,7 +5,7 @@ import { Send, MessageSquareText, Loader2, BookOpen, ExternalLink, FileText, Gra
 
 interface Citation {
   id: string;
-  episode_id: string;
+  signal_id: string;
   quote_en: string;
   quote_original?: string;
   source: string;
@@ -32,10 +32,10 @@ interface ChatResponse {
 }
 
 const STARTER_QUESTIONS = [
-  'What do people remember about photos friends sent them?',
-  'Why do people fail to find old photos?',
-  'How many episodes ended with the user giving up?',
-  'What workarounds do users try when search fails?',
+  'What cues do users remember about screenshots they are searching for?',
+  'What are the most common reasons users fail to find their photos?',
+  'How do users react when AI search blocks their safe search terms?',
+  'What workarounds do users try when the search engine fails them?',
 ];
 
 function renderAnswerWithCitations(
@@ -58,7 +58,7 @@ function renderAnswerWithCitations(
               ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200'
               : 'bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200'
           }`}
-          title={`Click to view ${isEpisode ? 'episode' : 'research'} details`}
+          title={`Click to view ${isEpisode ? 'signal' : 'research'} details`}
         >
           {part}
         </button>
@@ -136,8 +136,8 @@ export default function AskClient() {
     }
   };
 
-  const handleEpisodeOpen = (episodeId: string) => {
-    window.open(`/evidence-browser?search=${encodeURIComponent(episodeId)}`, '_blank');
+  const handleSignalOpen = (signalId: string) => {
+    window.open(`/evidence-browser?search=${encodeURIComponent(signalId)}`, '_blank');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -221,7 +221,7 @@ export default function AskClient() {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-700">Searching the corpus...</p>
-                <p className="text-xs text-gray-500 mt-1">Rewriting query → Embedding → Retrieving episodes → Generating answer</p>
+                <p className="text-xs text-gray-500 mt-1">Rewriting query → Embedding → Retrieving signals → Generating answer</p>
               </div>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function AskClient() {
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-amber-600 flex-shrink-0" />
                     <p className="text-sm text-amber-700">
-                      <span className="font-medium">Limited evidence:</span> Fewer than 3 relevant episodes were found. Research findings are shown where available.
+                      <span className="font-medium">Limited evidence:</span> Fewer than 3 relevant signals were found. Research findings are shown where available.
                     </p>
                   </div>
                 </div>
@@ -310,7 +310,7 @@ export default function AskClient() {
                               ? 'bg-blue-50 border-blue-300 shadow-sm ring-1 ring-blue-200'
                               : 'bg-white border-gray-200 hover:border-blue-200'
                           }`}
-                          onClick={() => handleEpisodeOpen(cit.episode_id)}
+                          onClick={() => handleSignalOpen(cit.signal_id)}
                         >
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">

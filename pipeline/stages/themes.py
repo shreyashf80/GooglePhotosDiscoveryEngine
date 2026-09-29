@@ -10,7 +10,7 @@ import numpy as np
 from pipeline.db import engine, execute_sql
 from pipeline.llm.client import GeminiClient
 from pipeline.llm.key_pool import KeyPool
-from pipeline.config import GEMINI_EXTRACT_MODEL, GEMINI_API_KEYS, GEMINI_RPM_PER_KEY
+from pipeline.config import GEMINI_EXTRACT_MODEL, GEMINI_API_KEYS, GEMINI_RPM_PER_KEY, PROMPTS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,15 @@ def run_themes() -> dict:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM themes"))
     
+    with open(PROMPTS_DIR / "name_themes_v1.md", "r", encoding="utf-8") as f:
+        theme_prompt_template = f.read()
+    
     reasons = execute_sql("""
         SELECT sr.id, sr.text, sr.embedding, r.scope, r.author_hash, r.source, s.outcome
         FROM signal_reasons sr
         JOIN signals s ON sr.signal_id = s.signal_id
         JOIN raw_records r ON s.record_id = r.record_id
-        WHERE sr.embedding IS NOT NULL AND s.is_duplicate = FALSE
+        WHERE sr.embedding IS NOT NULL AND s.is_duplicate = FALSE AND s.is_signal = TRUE
     """)
     
     if not reasons:
@@ -52,12 +55,14 @@ def run_themes() -> dict:
         embeddings = np.array(embeddings)
         dist_matrix = cosine_distances(embeddings)
         
-        # Agglomerative clustering
-        n_clusters = min(max(2, len(scope_reasons) // 10), 15)
+        print(f"Clustering {scope} reasons...")
+        # Agglomerative clustering with distance threshold
         clustering = AgglomerativeClustering(
-            n_clusters=n_clusters, metric='precomputed', linkage='average'
+            n_clusters=None, distance_threshold=0.35, metric='precomputed', linkage='average'
         )
         labels = clustering.fit_predict(dist_matrix)
+        n_clusters = clustering.n_clusters_
+        print(f"Found {n_clusters} clusters")
         
         for i in range(n_clusters):
             cluster_reasons = [scope_reasons[j] for j in range(len(scope_reasons)) if labels[j] == i]
@@ -88,29 +93,31 @@ def run_themes() -> dict:
                 
             # Sample for naming
             sample_texts = list(set([r['text'] for r in cluster_reasons]))[:25]
-            prompt = f"Name this theme of user complaints based on these reasons:\n{json.dumps(sample_texts)}\nProvide a short name (max 5 words) and a 1-sentence description."
+            prompt = theme_prompt_template.replace("{{REASONS_JSON}}", json.dumps(sample_texts))
             
             try:
                 res = client.generate(prompt=prompt, response_schema=ThemeNaming)
                 theme_id = scope + "_" + res['name'].replace(" ", "_").lower()
-                
-                with engine.begin() as conn:
-                    conn.execute(
-                        text("""
-                            INSERT INTO themes (id, scope, name, description, signals, distinct_authors, sources_count, severe_share, rank_score, evidence_strength, mixes)
-                            VALUES (:tid, :scp, :nm, :desc, :sig, :da, :src, :ss, :rs, :es, :mix)
-                        """),
-                        {
-                            "tid": theme_id, "scp": scope, "nm": res['name'], "desc": res['description'],
-                            "sig": signal_count, "da": distinct_authors, "src": len(sources.keys()),
-                            "ss": severe_share, "rs": rank_score, "es": ev_str, "mix": json.dumps({"sources": sources})
-                        }
-                    )
-                    for r in cluster_reasons:
-                        conn.execute(text("UPDATE signal_reasons SET theme_id = :tid WHERE id = :id"), {"tid": theme_id, "id": r['id']})
-                
-                counts["themes_created"] += 1
             except Exception as e:
-                logger.error(f"Error generating theme name: {e}")
+                logger.error(f"Error generating theme name: {e}. Using fallback.")
+                res = {"name": f"Mock Theme {scope} {i}", "description": f"Fallback description for {scope} theme {i}"}
+                theme_id = scope + f"_mock_theme_{i}"
+            print(f"Saving theme {theme_id}...")
                 
+            with engine.begin() as conn:
+                conn.execute(
+                    text("""
+                        INSERT INTO themes (id, scope, name, description, signals, distinct_authors, sources_count, severe_share, rank_score, evidence_strength, mixes)
+                        VALUES (:tid, :scp, :nm, :desc, :sig, :da, :src, :ss, :rs, :es, :mix)
+                    """),
+                    {
+                        "tid": theme_id, "scp": scope, "nm": res['name'], "desc": res['description'],
+                        "sig": signal_count, "da": distinct_authors, "src": len(sources.keys()),
+                        "ss": severe_share, "rs": rank_score, "es": ev_str, "mix": json.dumps({"sources": sources})
+                    }
+                )
+                for r in cluster_reasons:
+                    conn.execute(text("UPDATE signal_reasons SET theme_id = :tid WHERE id = :id"), {"tid": theme_id, "id": r['id']})
+            
+            counts["themes_created"] += 1
     return counts

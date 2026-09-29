@@ -126,6 +126,7 @@ class GeminiClient:
         start_time = time.time()
         last_exception = None
         attempt = 0
+        transient_503_retries = 0
 
         while True:
             attempt += 1
@@ -240,6 +241,7 @@ class GeminiClient:
                         or getattr(e, "code", None) in (500, 503)
                     )
                     if is_transient:
+                        print(f"Exception: {e}")
                         logger.warning(
                             "Transient error: model=%s, key_index=%d, error_type=%s, retrying...",
                             self._model_id,
@@ -248,6 +250,29 @@ class GeminiClient:
                         )
                         if time.time() - start_time > 600:
                             raise ServiceUnavailableError("Gemini API consistently unavailable for 10 minutes.") from e
+                            
+                        if "503" in error_str or getattr(e, "code", None) == 503:
+                            transient_503_retries += 1
+                            if transient_503_retries <= 5:
+                                backoff_time = 2 ** transient_503_retries
+                                logger.info("503 received. Backing off for %ds (attempt %d/5)", backoff_time, transient_503_retries)
+                                time.sleep(backoff_time)
+                                continue
+                            
+                            from pipeline.config import GEMINI_FALLBACK_MODELS
+                            
+                            # Shift to the next fallback model if any are available and we haven't tried them all
+                            if not hasattr(self, '_fallback_idx'):
+                                self._fallback_idx = 0
+                                
+                            if GEMINI_FALLBACK_MODELS and self._fallback_idx < len(GEMINI_FALLBACK_MODELS):
+                                self._model_id = GEMINI_FALLBACK_MODELS[self._fallback_idx]
+                                self._fallback_idx += 1
+                                logger.info("Falling back to model %s due to 503.", self._model_id)
+                                transient_503_retries = 0
+                            else:
+                                raise ServiceUnavailableError("Gemini API consistently unavailable across all fallbacks.") from e
+
                         time.sleep(2.0)
                         continue
 

@@ -39,6 +39,7 @@ async def get_overview():
             (SELECT count(*) FROM raw_records) as total_records,
             (SELECT count(*) FROM raw_records WHERE scope IN ('core', 'adjacent')) as relevant_records,
             (SELECT count(*) FROM signals) as total_signals,
+            (SELECT count(*) FROM episodes) as total_episodes,
             (SELECT count(DISTINCT source) FROM raw_records) as sources_active,
             (SELECT min(created_at) FROM raw_records) as date_min,
             (SELECT max(created_at) FROM raw_records) as date_max
@@ -46,18 +47,25 @@ async def get_overview():
     
     (
         kpis, 
-        funnel_raw, funnel_deduped, funnel_keyword,
-        source_bd, lang_bd, class_bd, prod_bd, storage
+        funnel_raw, funnel_deduped, funnel_keyword, funnel_success_tip, funnel_failed,
+        source_bd, lang_bd, class_bd, prod_bd, storage, dropped_sigs,
+        sig_scope_bd, sig_class_bd, sig_source_bd
     ) = await asyncio.gather(
         fetch_one(kpis_query),
         fetch_one("SELECT count(*) as c FROM raw_records"),
-        fetch_one("SELECT count(*) as c FROM raw_records WHERE status != 'raw'"),
+        fetch_one("SELECT count(*) as c FROM raw_records WHERE exclusion_reason IS NULL OR exclusion_reason NOT IN ('duplicate', 'too_short')"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE keyword_hit = true"),
-        execute_query("SELECT source, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY source"),
-        execute_query("SELECT lang, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY lang"),
-        execute_query("SELECT relevance_class, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY relevance_class"),
-        execute_query("SELECT product, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY product"),
-        fetch_one("SELECT pg_database_size(current_database()) as size")
+        fetch_one("SELECT count(*) as c FROM raw_records WHERE relevance_class = 'success_or_tip'"),
+        fetch_one("SELECT count(*) as c FROM raw_records WHERE status = 'extract_failed'"),
+        execute_query("SELECT r.source, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY r.source"),
+        execute_query("SELECT r.lang, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY r.lang"),
+        execute_query("SELECT r.relevance_class, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY r.relevance_class"),
+        execute_query("SELECT s.product, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id GROUP BY s.product"),
+        fetch_one("SELECT pg_database_size(current_database()) as size"),
+        fetch_one("SELECT count(*) as c FROM signals WHERE is_signal = false"),
+        execute_query("SELECT r.scope, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id WHERE s.is_signal = true GROUP BY r.scope"),
+        execute_query("SELECT r.relevance_class, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id WHERE s.is_signal = true GROUP BY r.relevance_class"),
+        execute_query("SELECT r.source, count(*) as count FROM signals s JOIN raw_records r ON s.record_id = r.record_id WHERE s.is_signal = true GROUP BY r.source")
     )
     
     # Top Themes
@@ -72,7 +80,19 @@ async def get_overview():
         "keyword_pass": funnel_keyword["c"] if funnel_keyword else 0,
         "llm_relevant": kpis["relevant_records"] if kpis else 0,
         "extracted_signals": kpis["total_signals"] if kpis else 0,
+        "extracted_episodes": kpis["total_episodes"] if kpis else 0,
+        "success_tip": funnel_success_tip["c"] if funnel_success_tip else 0,
+        "failed_extractions": funnel_failed["c"] if funnel_failed else 0,
+        "dropped_at_signals": dropped_sigs["c"] if dropped_sigs else 0,
     }
+
+    # Don't overwrite total_episodes with total_signals
+    # The kpis query already returns total_episodes natively now.
+
+    # Sufficiency data for the frontend
+    sufficiency_rows = await execute_query(
+        "SELECT evidence_strength, count(*) as count FROM hypotheses GROUP BY evidence_strength"
+    )
     
     result = {
         "kpis": kpis,
@@ -83,6 +103,12 @@ async def get_overview():
             "relevance": class_bd,
             "product": prod_bd,
         },
+        "signal_breakdowns": {
+            "scope": sig_scope_bd,
+            "relevance_class": sig_class_bd,
+            "source": sig_source_bd
+        },
+        "sufficiency": sufficiency_rows or [],
         "top_themes": top_themes,
         "funnel_stats": funnel_stats,
         "pipeline_health": {
@@ -91,6 +117,14 @@ async def get_overview():
     }
     set_cached("overview", result)
     return result
+
+
+@router.get("/funnel")
+async def get_funnel():
+    try:
+        return await execute_query("SELECT * FROM funnel_stats")
+    except Exception:
+        return []
 
 @router.get("/themes")
 async def list_themes(scope: Optional[str] = None):
@@ -125,7 +159,14 @@ async def get_theme(id: str):
 async def list_hypotheses():
     cached = get_cached("hypotheses")
     if cached: return cached
-    res = await execute_query("SELECT * FROM hypotheses WHERE origin = 'data_derived' ORDER BY rank DESC")
+    query = """
+        SELECT h.*, t.scope
+        FROM hypotheses h
+        LEFT JOIN themes t ON h.theme_id = t.id
+        WHERE h.origin = 'data_derived'
+        ORDER BY h.rank DESC
+    """
+    res = await execute_query(query)
     set_cached("hypotheses", res)
     return res
 
@@ -178,7 +219,7 @@ async def list_signals(
     funnel_stage: Optional[str] = None,
     outcome: Optional[str] = None
 ):
-    where = ["s.is_duplicate = FALSE"]
+    where = ["s.is_signal = TRUE"]
     params = {}
     
     if scope:
@@ -208,9 +249,11 @@ async def list_signals(
     count_q = f"SELECT count(*) as c FROM signals s JOIN raw_records r ON s.record_id = r.record_id {where_clause}"
     
     data_q = f"""
-        SELECT s.*, r.source, r.lang, r.created_at, r.url, r.scope, r.relevance_class
+        SELECT s.*, r.source, r.lang, r.created_at, r.url, r.scope, r.relevance_class, t.name AS theme_name
         FROM signals s
         JOIN raw_records r ON s.record_id = r.record_id
+        LEFT JOIN (SELECT signal_id, MAX(theme_id) as theme_id FROM signal_reasons GROUP BY signal_id) sr ON sr.signal_id = s.signal_id
+        LEFT JOIN themes t ON t.id = sr.theme_id
         {where_clause}
         ORDER BY r.created_at DESC NULLS LAST
         LIMIT :limit OFFSET :offset
@@ -285,7 +328,7 @@ async def get_how_it_works():
     
     funnel_raw, funnel_deduped, funnel_keyword, funnel_rel, funnel_sigs, example = await asyncio.gather(
         fetch_one("SELECT count(*) as c FROM raw_records"),
-        fetch_one("SELECT count(*) as c FROM raw_records WHERE status != 'raw'"),
+        fetch_one("SELECT count(*) as c FROM raw_records WHERE exclusion_reason IS NULL OR exclusion_reason NOT IN ('duplicate', 'too_short')"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE keyword_hit = true"),
         fetch_one("SELECT count(*) as c FROM raw_records WHERE scope IN ('core', 'adjacent')"),
         fetch_one("SELECT count(*) as c FROM signals"),
@@ -327,9 +370,9 @@ async def list_literature():
 
 @router.get("/segments")
 async def get_segments(dimension: str):
-    allowed = ["source", "product", "class", "language"]
+    allowed = ["source", "product", "class", "language", "photo_group", "photo_origin", "platform"]
     if dimension not in allowed:
-        return {"error": "Invalid dimension"}
+        return []
         
     cached = get_cached(f"segments_{dimension}")
     if cached: return cached
@@ -349,9 +392,24 @@ async def get_handoff():
         WHERE origin = 'data_derived' 
         ORDER BY rank DESC
     """)
+    
+    # Backward compatibility for frontend build
+    d1 = await execute_query("SELECT hypothesis_id, title, status FROM hypotheses WHERE evidence_strength IN ('directional', 'strong')")
+    
+    try:
+        drafts = await execute_query("SELECT * FROM research_handoff")
+    except Exception:
+        drafts = []
         
     res = {
-        "hypotheses": hyps
+        "hypotheses": hyps or [],
+        "decisions": {
+            "D1": d1 or [],
+            "D2": "See top segments in segment explorer",
+            "D3": "Not determined",
+            "D4": "Not prioritized for D4"
+        },
+        "drafts": drafts or []
     }
     set_cached("handoff", res)
     return res

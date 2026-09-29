@@ -38,10 +38,14 @@ DATABASE_URL_DIRECT: str = os.getenv("DATABASE_URL_DIRECT", DATABASE_URL)
 GEMINI_API_KEYS: list[str] = [
     k.strip() for k in _require_env("GEMINI_API_KEYS").split(",") if k.strip()
 ]
-GEMINI_FILTER_MODEL: str = os.getenv("GEMINI_FILTER_MODEL", "")
-GEMINI_EXTRACT_MODEL: str = os.getenv("GEMINI_EXTRACT_MODEL", "")
-GEMINI_CHAT_MODEL: str = os.getenv("GEMINI_CHAT_MODEL", "")
+GEMINI_FILTER_MODEL: str = os.getenv("GEMINI_FILTER_MODEL", "gemini-robotics-er-2-preview")
+GEMINI_EXTRACT_MODEL: str = os.getenv("GEMINI_EXTRACT_MODEL", "gemini-robotics-er-2-preview")
+GEMINI_CHAT_MODEL: str = os.getenv("GEMINI_CHAT_MODEL", "gemini-robotics-er-2-preview")
 GEMINI_RPM_PER_KEY: int = _env_int("GEMINI_RPM_PER_KEY", 15)
+GEMINI_FALLBACK_MODELS: list[str] = [
+    "gemini-3.6-flash",
+    "gemini-robotics-er-2-preview"
+]
 PROMPT_VERSION: str = os.getenv("PROMPT_VERSION", "extract_v2")
 FILTER_PROMPT_VERSION: str = os.getenv("FILTER_PROMPT_VERSION", "filter_v2")
 

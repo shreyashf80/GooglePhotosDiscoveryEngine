@@ -636,9 +636,25 @@ def embed() -> None:
 def analyze() -> None:
     """Compute archetype_stats and funnel_stats (FR-70, FR-80–FR-83, FR-88)."""
     from pipeline.stages.analyze import run_analyze
+    from pipeline.stages.signals import run_signals
+    from pipeline.stages.themes import run_themes
+    from pipeline.stages.derive import run_derive
 
     typer.echo("Running analysis stage...")
     started_at = datetime.now(timezone.utc)
+    
+    typer.echo("Running signals extraction...")
+    counts_sig = run_signals()
+    typer.echo(f"Signals counts: {counts_sig}")
+    
+    typer.echo("Running theme clustering...")
+    counts_thm = run_themes()
+    typer.echo(f"Themes counts: {counts_thm}")
+    
+    typer.echo("Running hypothesis derivation...")
+    counts_hyp = run_derive()
+    typer.echo(f"Hypotheses counts: {counts_hyp}")
+    
     counts = run_analyze()
     ended_at = datetime.now(timezone.utc)
     _log_run("analyze", "all", started_at, ended_at, counts, [])
@@ -647,24 +663,24 @@ def analyze() -> None:
     typer.echo(f"  Archetypes computed:     {counts.get('archetypes_written', 0):>6,d}")
     typer.echo(f"  Funnel stages computed:  {counts.get('funnel_stages_written', 0):>6,d}")
 
-    # Print archetype table
+    # Print themes
     from pipeline.db import execute_sql
-    typer.echo("\n🏷️  Archetype Stats:")
-    typer.echo(f"  {'Archetype':<25s} {'Count':>6s} {'Share':>6s} {'Sev':>5s} {'Stakes':>6s} {'Score':>6s} {'Evidence':<12s}")
-    typer.echo(f"  {'-'*25} {'-'*6} {'-'*6} {'-'*5} {'-'*6} {'-'*6} {'-'*12}")
+    typer.echo("\n🏷️  Top Themes:")
+    typer.echo(f"  {'Theme':<25s} {'Signals':>8s} {'Authors':>8s} {'Score':>6s} {'Evidence':<12s}")
+    typer.echo(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*6} {'-'*12}")
     try:
         rows = execute_sql(
-            "SELECT * FROM archetype_stats ORDER BY opportunity_score DESC"
+            "SELECT * FROM themes ORDER BY rank_score DESC LIMIT 10"
         )
         for row in rows:
             typer.echo(
-                f"  {row['archetype']:<25s} {row['episode_count']:>6d} "
-                f"{row['share_of_episodes']:>5.1%} {row['avg_severity']:>5.1f} "
-                f"{row['avg_stakes_weight']:>6.2f} {row['opportunity_score']:>6.1f} "
+                f"  {row['name'][:25]:<25s} {row['signals']:>8d} "
+                f"{row['distinct_authors']:>8d} "
+                f"{row['rank_score']:>6.1f} "
                 f"{row['evidence_strength']:<12s}"
             )
     except Exception:
-        typer.echo("  (could not read archetype_stats)")
+        typer.echo("  (could not read themes)")
 
     typer.echo("\n🔍 Retrieval Funnel Stats:")
     typer.echo(f"  {'Stage':<12s} {'Episodes':>8s} {'Complaints':>10s} {'GaveUp%':>8s} {'Sev':>5s} {'Evidence':<12s}")
@@ -718,16 +734,30 @@ def import_csv(path: str = typer.Argument(..., help="Path to CSV file")) -> None
         _log_run("ingest", "csv", started_at, datetime.now(timezone.utc), {"fetched": 0, "stored": 0}, [err_msg])
 
 
-@app.command(name="import-literature")
-def import_literature(path: str = typer.Argument(..., help="Path to literature file")) -> None:
-    """Import literature for RAG (P1)."""
-    typer.echo(f"[STUB] import-literature {path}")
-
-
 @app.command(name="run-all")
-def run_all() -> None:
+def run_all(
+    source: str = typer.Option("all", "--source", help="Data source to process (e.g. all, reddit)"),
+    skip_ingest: bool = typer.Option(False, "--skip-ingest", help="Skip the ingestion step"),
+    target_db: str = typer.Option("default", "--target-db", help="Target database for confirmation"),
+    resume: bool = typer.Option(False, "--resume", help="Resume from last processed record where supported"),
+) -> None:
     """Run all pipeline stages in order."""
-    typer.echo("[STUB] run-all")
+    typer.echo(f"Target Database: {target_db}")
+    typer.confirm(f"Are you sure you want to run the full pipeline on {target_db}?", abort=True)
+    
+    typer.echo(f"\n🚀 Starting full pipeline run...")
+    
+    if not skip_ingest:
+        ingest(source=source)
+    else:
+        typer.echo("\n⏭️ Skipping ingest step (--skip-ingest)")
+        
+    dedup()
+    filter_cmd(limit=None)
+    extract(limit=None, reprocess=not resume if not resume else False) # If resume is True, we don't reprocess. By default extract skips already processed.
+    analyze()
+    
+    typer.echo("\n✅ Full pipeline run completed successfully.")
 
 
 @app.command(name="import-literature")

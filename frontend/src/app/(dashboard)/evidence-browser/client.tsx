@@ -1,28 +1,13 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EnumLabel } from '@/components/EnumLabel';
-import { AlertTriangle, ChevronDown, ChevronUp, Download } from 'lucide-react';
-import { fetchApi } from '@/lib/api';
+import { ChevronDown, ChevronUp, Download, AlertCircle } from 'lucide-react';
 
-function EpisodeRow({ ep }: { ep: any }) {
+function SignalRow({ signal }: { signal: any }) {
   const [expanded, setExpanded] = useState(false);
-  const [details, setDetails] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (expanded && !details && !loading) {
-      setLoading(true);
-      fetchApi<any>(`/episodes/${ep.episode_id}`)
-        .then(data => setDetails(data))
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    }
-  }, [expanded, details, loading, ep.episode_id]);
-
-  const isLowConfidence = ep.extraction_confidence === 'low';
 
   return (
     <div className="border rounded-md bg-white overflow-hidden">
@@ -35,24 +20,19 @@ function EpisodeRow({ ep }: { ep: any }) {
         </div>
         <div className="flex-1 space-y-2">
           <div className="flex items-start justify-between">
-            <p className="font-medium text-gray-900">{ep.summary_en}</p>
-            {isLowConfidence && (
-              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 ml-2 whitespace-nowrap">
-                <AlertTriangle className="h-3 w-3 mr-1" /> Low Confidence
-              </Badge>
-            )}
-            {ep.is_duplicate && (
-              <Badge variant="outline" className="bg-gray-100 text-gray-500 border-gray-200 ml-2 whitespace-nowrap">
-                Duplicate
+            <p className="font-medium text-gray-900">{signal.summary_en}</p>
+            {signal.emotional_cost && signal.emotional_cost !== 'none' && signal.emotional_cost !== 'unknown' && (
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 ml-2 whitespace-nowrap">
+                <AlertCircle className="h-3 w-3 mr-1" /> {signal.emotional_cost}
               </Badge>
             )}
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
-            <Badge variant="secondary"><EnumLabel value={ep.archetype_primary} /></Badge>
-            <Badge variant="outline"><EnumLabel value={ep.photo_category} /></Badge>
-            <Badge variant="outline"><EnumLabel value={ep.outcome} /></Badge>
+            {signal.theme_name && <Badge variant="secondary">{signal.theme_name}</Badge>}
+            <Badge variant="outline"><EnumLabel value={signal.scope} /></Badge>
+            {signal.outcome && <Badge variant="outline"><EnumLabel value={signal.outcome} /></Badge>}
             <span className="text-gray-500 ml-auto flex items-center gap-2">
-              <EnumLabel value={ep.source} /> &bull; {new Date(ep.created_at).toLocaleDateString()}
+              <EnumLabel value={signal.source} /> &bull; {new Date(signal.created_at).toLocaleDateString()}
             </span>
           </div>
         </div>
@@ -65,17 +45,17 @@ function EpisodeRow({ ep }: { ep: any }) {
               <h4 className="font-semibold text-sm text-gray-700 mb-2">Quotes</h4>
               <div className="space-y-3">
                 <div className="p-3 bg-white border rounded text-sm text-gray-800 italic">
-                  "{ep.quote_en}"
+                  "{signal.quote_en}"
                 </div>
-                {ep.quote_original && ep.quote_original !== ep.quote_en && (
+                {signal.quote_original && signal.quote_original !== signal.quote_en && (
                   <div className="p-3 bg-white border rounded text-sm text-gray-600 italic">
-                    Original ({ep.lang}): "{ep.quote_original}"
+                    Original ({signal.lang}): "{signal.quote_original}"
                   </div>
                 )}
               </div>
-              {ep.url && (
+              {signal.url && (
                 <div className="mt-3">
-                  <a href={ep.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm font-medium">
+                  <a href={signal.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm font-medium">
                     View original post ↗
                   </a>
                 </div>
@@ -83,75 +63,27 @@ function EpisodeRow({ ep }: { ep: any }) {
             </div>
             
             <div className="space-y-4">
-              {loading && <div className="text-sm text-gray-500 animate-pulse">Loading details...</div>}
-              
-              {details && (
-                <>
-                  {details.cues?.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold text-sm text-gray-700 mb-1">Remembered Cues</h4>
-                      <ul className="list-disc pl-4 text-sm space-y-1">
-                        {details.cues.map((c: any) => (
-                          <li key={c.id}>
-                            <EnumLabel value={c.cue_type} />: <span className="font-medium">"{c.value}"</span> <span className="text-gray-500">({c.precision})</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {details.queries?.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold text-sm text-gray-700 mb-1">Queries Tried</h4>
-                      <ol className="list-decimal pl-4 text-sm space-y-1">
-                        {details.queries.map((q: any) => (
-                          <li key={q.id}>
-                            <span className="font-medium">"{q.query_text}"</span> <span className="text-gray-500">(<EnumLabel value={q.query_style} />)</span>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-                </>
-              )}
-              
-              {ep.failure_modes?.length > 0 && (
+              {signal.remembered && signal.remembered.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-sm text-gray-700 mb-1">Failure Modes</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {ep.failure_modes.map((f: string) => (
-                      <span key={f} className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded">
-                        <EnumLabel value={f} />
-                      </span>
+                  <h4 className="font-semibold text-sm text-gray-700 mb-1">Remembered Cues</h4>
+                  <ul className="list-disc pl-4 text-sm space-y-1">
+                    {signal.remembered.map((c: string, idx: number) => (
+                      <li key={idx} className="text-gray-700">{c}</li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               )}
               
-              {ep.workarounds?.length > 0 && (
+              {signal.forgot && signal.forgot.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-sm text-gray-700 mb-1">Workarounds</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {ep.workarounds.map((w: string) => (
-                      <span key={w} className="text-xs bg-gray-200 text-gray-800 border px-2 py-0.5 rounded">
-                        <EnumLabel value={w} />
-                      </span>
+                  <h4 className="font-semibold text-sm text-gray-700 mb-1">Forgotten Cues</h4>
+                  <ul className="list-disc pl-4 text-sm space-y-1">
+                    {signal.forgot.map((c: string, idx: number) => (
+                      <li key={idx} className="text-gray-700">{c}</li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               )}
-              
-              <div>
-                <h4 className="font-semibold text-sm text-gray-700 mb-2">Behavior Context</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div><span className="text-gray-500">Trigger:</span> <EnumLabel value={ep.trigger || 'unknown'} /></div>
-                  <div><span className="text-gray-500">Expectation:</span> <EnumLabel value={ep.expectation || 'unknown'} /></div>
-                  <div><span className="text-gray-500">Mental Model:</span> <EnumLabel value={ep.mental_model || 'unknown'} /></div>
-                  <div><span className="text-gray-500">Organizing Habit:</span> <EnumLabel value={ep.organizing_habit || 'unknown'} /></div>
-                  <div><span className="text-gray-500">Frequency:</span> <EnumLabel value={ep.frequency || 'unknown'} /></div>
-                  <div><span className="text-gray-500">Emotional Cost:</span> <EnumLabel value={ep.emotional_cost || 'unknown'} /></div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -160,7 +92,7 @@ function EpisodeRow({ ep }: { ep: any }) {
   )
 }
 
-export default function EvidenceClient({ initialData, searchParams }: { initialData: any, searchParams: Record<string, string> }) {
+export default function EvidenceClient({ initialData, themes = [], searchParams }: { initialData: any, themes?: any[], searchParams: Record<string, string> }) {
   const router = useRouter();
 
   const updateFilter = (key: string, value: string) => {
@@ -170,17 +102,17 @@ export default function EvidenceClient({ initialData, searchParams }: { initialD
     } else {
       params.delete(key);
     }
-    params.delete('page'); // reset to page 1 on filter change
+    params.delete('page');
     router.push(`?${params.toString()}`);
   };
 
   const handleExport = () => {
     const params = new URLSearchParams(searchParams);
-    // Assuming backend returns CSV when hitting export endpoint
-    window.open(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/episodes/export?${params.toString()}`, '_blank');
+    window.open(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/signals/export?${params.toString()}`, '_blank');
   };
 
-  const { items, total, page, per_page } = initialData;
+  const { items = [], total = 0, page = 1, per_page = 20 } = initialData || {};
+  const currentPage = Number(page);
   const totalPages = Math.ceil(total / per_page);
 
   return (
@@ -188,41 +120,29 @@ export default function EvidenceClient({ initialData, searchParams }: { initialD
       <div className="bg-white p-4 rounded-md border space-y-4">
         <div className="grid grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Archetype</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.archetype || ''} onChange={e => updateFilter('archetype', e.target.value)}>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Scope</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.scope || ''} onChange={e => updateFilter('scope', e.target.value)}>
               <option value="">All</option>
-              <option value="utility_lookup">Utility Lookup</option>
-              <option value="needle_in_flood">Needle in Flood</option>
-              <option value="provenance_lost">Provenance Lost</option>
-              <option value="refinement_dead_end">Refinement Dead End</option>
-              <option value="vocabulary_mismatch">Vocabulary Mismatch</option>
-              <option value="time_drift">Time Drift</option>
-              <option value="emergent">Emergent</option>
+              <option value="core">Core</option>
+              <option value="adjacent">Adjacent</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.category || ''} onChange={e => updateFilter('category', e.target.value)}>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Theme</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.theme || ''} onChange={e => updateFilter('theme', e.target.value)}>
               <option value="">All</option>
-              <option value="document_text">Document/Text</option>
-              <option value="people_moment">People Moment</option>
-              <option value="pet_animal">Pet/Animal</option>
-              <option value="travel_place">Travel/Place</option>
-              <option value="meme_forward">Meme/Forward</option>
-              <option value="health_medical">Health/Medical</option>
-              <option value="other">Other</option>
-              <option value="unknown">Unknown</option>
+              {themes.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Outcome</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.outcome || ''} onChange={e => updateFilter('outcome', e.target.value)}>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Relevance Class</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.relevance_class || ''} onChange={e => updateFilter('relevance_class', e.target.value)}>
               <option value="">All</option>
-              <option value="found_easily">Found Easily</option>
-              <option value="found_with_effort">Found With Effort</option>
-              <option value="still_searching">Still Searching</option>
-              <option value="gave_up">Gave Up</option>
-              <option value="unknown">Unknown</option>
+              <option value="success_or_tip">Success / Tip</option>
+              <option value="struggle">Struggle</option>
+              <option value="failure">Failure</option>
             </select>
           </div>
           <div>
@@ -238,119 +158,59 @@ export default function EvidenceClient({ initialData, searchParams }: { initialD
         </div>
         <div className="grid grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Hypothesis ID</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
             <input 
               type="text" 
               className="w-full border rounded p-2 text-sm" 
-              placeholder="e.g. H1" 
-              value={searchParams.hypothesis || ''} 
-              onChange={e => updateFilter('hypothesis', e.target.value)} 
+              placeholder="e.g. google_photos" 
+              value={searchParams.product || ''} 
+              onChange={e => updateFilter('product', e.target.value)} 
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Hypothesis Direction</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.hypothesis_direction || ''} onChange={e => updateFilter('hypothesis_direction', e.target.value)}>
-              <option value="">Any</option>
-              <option value="support">Support</option>
-              <option value="contradict">Contradict</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Cue Type</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Funnel Stage</label>
             <input 
               type="text" 
               className="w-full border rounded p-2 text-sm" 
-              placeholder="e.g. visual_object" 
-              value={searchParams.cue_type || ''} 
-              onChange={e => updateFilter('cue_type', e.target.value)} 
+              placeholder="e.g. search" 
+              value={searchParams.funnel_stage || ''} 
+              onChange={e => updateFilter('funnel_stage', e.target.value)} 
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Trigger</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.trigger || ''} onChange={e => updateFilter('trigger', e.target.value)}>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Outcome</label>
+            <select className="w-full border rounded p-2 text-sm" value={searchParams.outcome || ''} onChange={e => updateFilter('outcome', e.target.value)}>
               <option value="">All</option>
-              <option value="share_with_someone">Share with Someone</option>
-              <option value="document_or_form">Document/Form</option>
-              <option value="proof_or_record">Proof/Record</option>
-              <option value="nostalgia">Nostalgia</option>
-              <option value="reuse_content">Reuse Content</option>
-              <option value="reference_or_recall">Reference/Recall</option>
-              <option value="other">Other</option>
+              <option value="found_easily">Found Easily</option>
+              <option value="found_with_effort">Found With Effort</option>
+              <option value="still_searching">Still Searching</option>
+              <option value="gave_up">Gave Up</option>
               <option value="unknown">Unknown</option>
             </select>
           </div>
-        </div>
-        <div className="grid grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Expectation</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.expectation || ''} onChange={e => updateFilter('expectation', e.target.value)}>
-              <option value="">All</option>
-              <option value="understand_description">Understand Description</option>
-              <option value="filter_by_date_or_place">Filter by Date/Place</option>
-              <option value="ai_should_find_it">AI Should Find It</option>
-              <option value="assumed_saved">Assumed Saved</option>
-              <option value="other">Other</option>
-              <option value="unknown">Unknown</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Mental Model</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.mental_model || ''} onChange={e => updateFilter('mental_model', e.target.value)}>
-              <option value="">All</option>
-              <option value="by_date_timeline">By Date/Timeline</option>
-              <option value="by_album_or_folder">By Album/Folder</option>
-              <option value="by_source_app">By Source App</option>
-              <option value="search_understands_meaning">Search Understands Meaning</option>
-              <option value="all_in_one_place">All In One Place</option>
-              <option value="unknown">Unknown</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Organizing Habit</label>
-            <select className="w-full border rounded p-2 text-sm" value={searchParams.organizing_habit || ''} onChange={e => updateFilter('organizing_habit', e.target.value)}>
-              <option value="">All</option>
-              <option value="uses_albums">Uses Albums</option>
-              <option value="uses_favorites_or_captions">Favorites/Captions</option>
-              <option value="labels_faces">Labels Faces</option>
-              <option value="no_organization">No Organization</option>
-              <option value="unknown">Unknown</option>
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Search text</label>
-              <input 
-                type="text" 
-                className="w-full border rounded p-2 text-sm" 
-                placeholder="Search summaries..." 
-                value={searchParams.search || ''} 
-                onChange={e => updateFilter('search', e.target.value)} 
-              />
-            </div>
-            <div className="pb-0 self-end">
-              <Button variant="outline" onClick={handleExport} className="w-full flex items-center justify-center gap-2">
-                <Download className="h-4 w-4" /> Export
-              </Button>
-            </div>
+          <div className="pb-0 self-end">
+            <Button variant="outline" onClick={handleExport} className="w-full flex items-center justify-center gap-2">
+              <Download className="h-4 w-4" /> Export
+            </Button>
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between text-sm text-gray-600">
-        <div>Showing {items.length} of {total} episodes</div>
+        <div>Showing {items.length} of {total} signals</div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => updateFilter('page', String(page - 1))}>Previous</Button>
-          <span>Page {page} of {totalPages || 1}</span>
-          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => updateFilter('page', String(page + 1))}>Next</Button>
+          <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => updateFilter('page', String(currentPage - 1))}>Previous</Button>
+          <span>Page {currentPage} of {totalPages || 1}</span>
+          <Button variant="outline" size="sm" disabled={currentPage >= totalPages || totalPages === 0} onClick={() => updateFilter('page', String(currentPage + 1))}>Next</Button>
         </div>
       </div>
 
       <div className="space-y-4">
-        {items.map((ep: any) => (
-          <EpisodeRow key={ep.episode_id} ep={ep} />
+        {items.map((signal: any) => (
+          <SignalRow key={signal.signal_id || signal.record_id} signal={signal} />
         ))}
         {items.length === 0 && (
-          <div className="p-8 text-center text-gray-500 border rounded-md bg-gray-50">No episodes match your filters.</div>
+          <div className="p-8 text-center text-gray-500 border rounded-md bg-gray-50">No signals match your filters.</div>
         )}
       </div>
     </div>

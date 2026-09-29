@@ -62,7 +62,7 @@ def run_dedup() -> dict:
                 # Check length (exclude < 20 chars)
                 if len(original_text.strip()) < 20:
                     conn.execute(
-                        text("UPDATE raw_records SET status = 'excluded', relevance_reason = 'too_short' WHERE record_id = :id"),
+                        text("UPDATE raw_records SET status = 'excluded', exclusion_reason = 'too_short' WHERE record_id = :id"),
                         {"id": record_id}
                     )
                     counts["excluded_too_short"] += 1
@@ -80,7 +80,7 @@ def run_dedup() -> dict:
                 if text_hash in seen_hashes:
                     # Duplicate
                     conn.execute(
-                        text("UPDATE raw_records SET status = 'excluded', relevance_reason = 'duplicate' WHERE record_id = :id"),
+                        text("UPDATE raw_records SET status = 'excluded', exclusion_reason = 'duplicate' WHERE record_id = :id"),
                         {"id": record_id}
                     )
                     counts["duplicates_dropped"] += 1

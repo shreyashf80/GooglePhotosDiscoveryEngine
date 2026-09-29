@@ -1,215 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { EvidenceBadge, ClickableCount, LoadingState } from '@/components/shared/components'
-import { Progress } from '@/components/ui/progress'
-import { fetchApi } from '@/lib/api'
-import { EnumLabel } from '@/components/EnumLabel'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 
-function HypothesisCard({ hypothesis }: { hypothesis: any }) {
-  const [expanded, setExpanded] = useState(false)
-  const [details, setDetails] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+export default function HypothesisBoardClient({ hypotheses }: { hypotheses: any[] }) {
+  const [scope, setScope] = useState<'core' | 'adjacent'>('core')
+  const [stageFilter, setStageFilter] = useState<string>('all')
 
-  const handleExpand = async () => {
-    setExpanded(!expanded)
-    if (!expanded && !details) {
-      setLoading(true)
-      try {
-        const data = await fetchApi<any>(`/hypotheses/${hypothesis.hypothesis_id}`)
-        setDetails(data)
-      } finally {
-        setLoading(false)
-      }
-    }
-  }
+  const stages = Array.from(new Set(hypotheses.map(h => h.details?.stage).filter(Boolean))) as string[]
 
-  const totalVotes = hypothesis.support_count + hypothesis.contradict_count
-  const supportPercent = totalVotes > 0 ? (hypothesis.support_count / totalVotes) * 100 : 0
-  const isAnecdotal = hypothesis.evidence_strength === 'anecdotal'
-
-  const renderH5Chart = (details: any) => {
-    if (!details) return null
-    const failureModes = ['ui_friction', 'zero_results', 'wrong_results', 'ask_photos_failure', 'other_failure']
-    const allCues = new Set([...Object.keys(details.memory || {}), ...Object.keys(details.utility || {})])
-    const data = Array.from(allCues)
-      .filter(cue => !failureModes.includes(cue))
-      .map(cue => ({
-        cue,
-        memory: details.memory?.[cue] || 0,
-        utility: details.utility?.[cue] || 0
-      })).sort((a, b) => (b.memory + b.utility) - (a.memory + a.utility)).slice(0, 5)
-
-    return (
-      <div className="space-y-2 mt-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium">Top Cues: Memory vs Utility</h4>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-purple-500"></div>Memory</div>
-            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded bg-blue-500"></div>Utility</div>
-          </div>
-        </div>
-        {data.map(d => (
-          <div key={d.cue} className="flex items-center text-xs">
-            <span className="w-32 truncate" title={d.cue}><EnumLabel value={d.cue} /></span>
-            <div className="flex-1 flex gap-1 h-4">
-              <div style={{ width: `${(d.memory / 10) * 100}%` }} className="bg-purple-500 rounded" title={`Memory: ${d.memory}`} />
-              <div style={{ width: `${(d.utility / 10) * 100}%` }} className="bg-blue-500 rounded" title={`Utility: ${d.utility}`} />
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  const renderH6Chart = (details: any) => {
-    if (!details) return null
-    const buckets = ['under_6m', '6m_1y', '1_3y', '3y_plus']
-    return (
-      <div className="space-y-2 mt-4">
-        <h4 className="text-sm font-medium">Date Imprecision by Photo Age</h4>
-        {buckets.map(b => {
-          const stats = details[b]
-          if (!stats) return null
-          const rate = stats.total > 0 ? (stats.imprecision / stats.total) * 100 : 0
-          return (
-            <div key={b} className="flex items-center text-xs">
-              <span className="w-24"><EnumLabel value={b} /></span>
-              <div className="flex-1 h-4 bg-gray-100 rounded flex overflow-hidden">
-                <div style={{ width: `${rate}%` }} className="bg-amber-500" title={`Imprecise: ${stats.imprecision}/${stats.total}`} />
-              </div>
-              <span className="w-12 text-right">{rate.toFixed(0)}%</span>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
-  return (
-    <Card className="mb-4">
-      <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={handleExpand}>
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <CardTitle className="text-lg">{hypothesis.hypothesis_id}: {hypothesis.title}</CardTitle>
-              <EnumLabel value={hypothesis.status} className={`text-sm font-medium px-2 py-1 rounded capitalize ${
-                  hypothesis.status === 'supported' ? 'bg-green-100 text-green-800' :
-                  hypothesis.status === 'contradicted' ? 'bg-red-100 text-red-800' :
-                  hypothesis.status === 'mixed' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-gray-100 text-gray-800'
-                }`} />
-            </div>
-            <p className="text-sm text-gray-600">{hypothesis.statement}</p>
-          </div>
-          <div className="text-right text-sm">
-            <div><span className="text-gray-500">Relevant:</span> <ClickableCount count={hypothesis.relevant_count} filters={{ hypothesis: hypothesis.hypothesis_id }} /></div>
-          </div>
-        </div>
-      </CardHeader>
-      
-      {hypothesis.hypothesis_id === 'H5' ? (
-        <CardContent className="border-t pt-4">
-          {renderH5Chart(hypothesis.details)}
-        </CardContent>
-      ) : hypothesis.hypothesis_id === 'H6' ? (
-        <CardContent className="border-t pt-4">
-          {renderH6Chart(hypothesis.details)}
-        </CardContent>
-      ) : (
-        <CardContent className="border-t pt-4">
-           {isAnecdotal ? (
-             <div className="flex flex-col items-center gap-1 text-sm mb-2 text-gray-500">
-                <div className="w-full h-2 bg-gray-200 rounded" />
-                <span className="italic flex gap-1">Too few episodes to judge (<ClickableCount count={hypothesis.support_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'support' }} /> for, <ClickableCount count={hypothesis.contradict_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'contradict' }} /> against)</span>
-             </div>
-           ) : (
-             <div className="flex items-center gap-4 text-sm mb-2">
-                <span className="text-green-700 font-medium flex gap-1">Support: <ClickableCount count={hypothesis.support_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'support' }} /></span>
-                <Progress value={supportPercent} className="h-2 flex-1 [&>div]:bg-green-500 bg-red-100" />
-                <span className="text-red-700 font-medium flex gap-1">Contradict: <ClickableCount count={hypothesis.contradict_count} filters={{ hypothesis: hypothesis.hypothesis_id, hypothesis_direction: 'contradict' }} /></span>
-             </div>
-           )}
-        </CardContent>
-      )}
-
-      {expanded && (
-        <CardContent className="bg-gray-50 pt-4 border-t">
-          {loading ? (
-            <LoadingState />
-          ) : details ? (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                <h4 className="font-semibold text-green-700 mb-3 border-b pb-1">Top Supporting Evidence</h4>
-                <div className="space-y-4">
-                  {details.support_evidence?.map((ep: any) => (
-                    <div key={ep.episode_id} className="text-sm bg-white p-3 rounded shadow-sm border">
-                      <p className="italic mb-2">&quot;{ep.quote_en}&quot;</p>
-                      <div className="text-xs text-gray-500 flex justify-between">
-                        <span>Rank: {ep.rank} | Conf: {ep.extraction_confidence}</span>
-                        <a href={ep.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Source</a>
-                      </div>
-                    </div>
-                  ))}
-                  {!details.support_evidence?.length && <p className="text-sm text-gray-500">None found</p>}
-                </div>
-              </div>
-              <div>
-                <h4 className="font-semibold text-red-700 mb-3 border-b pb-1">Top Contradicting Evidence</h4>
-                <div className="space-y-4">
-                  {details.contradict_evidence?.map((ep: any) => (
-                    <div key={ep.episode_id} className="text-sm bg-white p-3 rounded shadow-sm border">
-                      <p className="italic mb-2">&quot;{ep.quote_en}&quot;</p>
-                      <div className="text-xs text-gray-500 flex justify-between">
-                        <span>Rank: {ep.rank} | Conf: {ep.extraction_confidence}</span>
-                        <a href={ep.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Source</a>
-                      </div>
-                    </div>
-                  ))}
-                  {!details.contradict_evidence?.length && <p className="text-sm text-gray-500">None found</p>}
-                </div>
-              </div>
-            </div>
-            {details.research_evidence && details.research_evidence.length > 0 && (
-              <div className="mt-6 border-t pt-4">
-                <h4 className="font-semibold text-blue-700 mb-3 border-b pb-1">Research Evidence</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {details.research_evidence.map((src: any) => (
-                    <div key={src.id} className="text-sm bg-white p-3 rounded shadow-sm border">
-                      <div className="flex justify-between items-start mb-2">
-                        <h5 className="font-medium">{src.title}</h5>
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{src.era}</span>
-                      </div>
-                      <p className="text-gray-600 mb-2">{src.citation}</p>
-                      {src.link && (
-                        <a href={src.link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs">
-                          Read source
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            </>
-          ) : (
-            <p className="text-sm text-red-500">Failed to load details.</p>
-          )}
-        </CardContent>
-      )}
-    </Card>
-  )
-}
-
-export default function HypothesisBoardClient({ hypotheses, emergent }: { hypotheses: any[], emergent: any[] }) {
-  const [sortBy, setSortBy] = useState<'id' | 'status' | 'strength'>('id')
-
-  const sorted = [...hypotheses].sort((a, b) => {
-    if (sortBy === 'status') return a.status.localeCompare(b.status)
-    if (sortBy === 'strength') return (b.support_count + b.contradict_count) - (a.support_count + a.contradict_count)
-    return a.hypothesis_id.localeCompare(b.hypothesis_id)
+  const filtered = hypotheses.filter(h => {
+    if (h.scope !== scope) return false
+    if (stageFilter !== 'all' && h.details?.stage !== stageFilter) return false
+    return true
   })
 
   return (
@@ -217,39 +22,83 @@ export default function HypothesisBoardClient({ hypotheses, emergent }: { hypoth
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold">Hypothesis Board</h1>
-          <p className="text-sm text-gray-500 mt-1">Status of our initial assumptions evaluated against real user episodes.</p>
+          <p className="text-sm text-gray-500 mt-1">Dynamic data-derived hypotheses from user episodes.</p>
         </div>
-        <div className="space-x-2">
-          <span className="text-sm text-gray-500">Sort by:</span>
-          <select 
-            className="text-sm border rounded px-2 py-1"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-          >
-            <option value="id">ID</option>
-            <option value="status">Status</option>
-            <option value="strength">Relevant Count</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        {sorted.map(h => <HypothesisCard key={h.hypothesis_id} hypothesis={h} />)}
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Emergent Patterns</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {emergent.map((e: any) => (
-              <span key={e.label} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-sm">
-                {e.label} <span className="font-bold bg-white px-1.5 rounded-full text-xs">{e.episode_count}</span>
-              </span>
-            ))}
-            {emergent.length === 0 && <span className="text-sm text-gray-500">No emergent patterns identified yet.</span>}
+        <div className="flex items-center gap-4">
+          <div className="space-x-2 flex items-center">
+            <span className="text-sm text-gray-500">Stage:</span>
+            <select 
+              className="text-sm border rounded px-2 py-1 bg-white"
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+            >
+              <option value="all">All Stages</option>
+              {stages.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      <Tabs value={scope} onValueChange={(v) => setScope(v as 'core' | 'adjacent')}>
+        <TabsList>
+          <TabsTrigger value="core">Core Scope</TabsTrigger>
+          <TabsTrigger value="adjacent">Adjacent Scope</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {filtered.map(h => (
+          <Card key={h.hypothesis_id} className="flex flex-col shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="pb-3 border-b bg-gray-50/50">
+              <div className="flex justify-between items-start gap-3 mb-3">
+                <CardTitle className="text-lg leading-snug font-bold">{h.title}</CardTitle>
+                {h.details?.stage && (
+                  <Badge variant="outline" className="shrink-0 bg-white capitalize">
+                    {h.details.stage.replace(/_/g, ' ')}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm font-medium text-gray-900 border-l-2 border-blue-500 pl-3 italic">
+                {h.statement}
+              </p>
+            </CardHeader>
+            <CardContent className="pt-4 flex-1 flex flex-col gap-5 text-sm">
+              <div>
+                <h4 className="font-semibold text-green-700 mb-1 flex items-center gap-1.5">
+                  <span className="text-lg leading-none">•</span> Why We Believe It
+                </h4>
+                <p className="text-gray-700 leading-relaxed">{h.details?.why || 'N/A'}</p>
+              </div>
+              
+              <div>
+                <h4 className="font-semibold text-amber-700 mb-1 flex items-center gap-1.5">
+                  <span className="text-lg leading-none">•</span> Counter-Evidence
+                </h4>
+                <p className="text-gray-700 leading-relaxed">{h.details?.counter || 'None identified'}</p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-red-700 mb-1 flex items-center gap-1.5">
+                  <span className="text-lg leading-none">•</span> What Would Disprove It
+                </h4>
+                <p className="text-gray-700 leading-relaxed">{h.details?.disprove || 'N/A'}</p>
+              </div>
+
+              <div className="mt-auto pt-4 border-t border-dashed">
+                <h4 className="font-semibold text-blue-800 mb-2">Recommended Research Question</h4>
+                <div className="bg-blue-50 text-blue-900 p-3 rounded text-sm font-medium border border-blue-100">
+                  {h.research_question || 'N/A'}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {filtered.length === 0 && (
+          <div className="col-span-full py-16 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed">
+            No hypotheses found for the selected filters.
+          </div>
+        )}
+      </div>
     </div>
   )
 }

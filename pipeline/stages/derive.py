@@ -116,20 +116,17 @@ def run_derive() -> dict:
                 conn.execute(
                     text("""
                         INSERT INTO hypotheses (
-                            hypothesis_id, title, statement, status, 
-                            support_count, contradict_count, relevant_count, 
+                            hypothesis_id, title, statement,
                             evidence_strength, details, computed_at, 
                             origin, theme_id, rank, research_question
                         )
                         VALUES (
-                            :hid, :title, :stmt, 'insufficient_data',
-                            :supp, :contra, :rel,
+                            :hid, :title, :stmt,
                             :ev_str, :det, NOW(),
                             'data_derived', :tid, :rank, :rq
                         )
                         ON CONFLICT (hypothesis_id) DO UPDATE SET
                             title = EXCLUDED.title, statement = EXCLUDED.statement,
-                            support_count = EXCLUDED.support_count,
                             evidence_strength = EXCLUDED.evidence_strength,
                             origin = EXCLUDED.origin, theme_id = EXCLUDED.theme_id,
                             rank = EXCLUDED.rank, research_question = EXCLUDED.research_question
@@ -138,9 +135,6 @@ def run_derive() -> dict:
                         "hid": f"D_{theme['id']}",
                         "title": theme['name'],
                         "stmt": res['statement'],
-                        "supp": theme['distinct_authors'],
-                        "contra": len(counter_signals),
-                        "rel": theme['distinct_authors'] + len(counter_signals),
                         "ev_str": theme['evidence_strength'],
                         "det": json.dumps({
                             "why": res['why_we_believe_it'],

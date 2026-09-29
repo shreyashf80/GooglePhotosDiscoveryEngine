@@ -1,26 +1,22 @@
 'use client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EnumLabel } from '@/components/EnumLabel';
-import { Copy, FileDown } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export default function HandoffClient({ handoff }: { handoff: any }) {
-  const { decisions, drafts } = handoff;
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
-
+export default function HandoffClient({ hypotheses }: { hypotheses: any[] }) {
   const downloadMarkdown = () => {
-    let md = '# Research Handoff\n\n## Decisions\n';
-    md += `- D1 (Hypotheses to validate): ${decisions.D1.map((h: any) => h.hypothesis_id).join(', ') || 'None'}\n`;
-    md += `- D2 (Segments to recruit): ${decisions.D2}\n`;
-    md += `- D3 (Archetype deep dive): ${decisions.D3}\n`;
-    md += `- D4 (Kill list): ${decisions.D4}\n\n`;
+    let md = '# Research Handoff: Data-Derived Hypotheses\n\n';
 
-    drafts.forEach((d: any) => {
-      md += `## Hypothesis: ${d.hypothesis_id}\n\n### Interview Questions\n${JSON.stringify(d.interview_questions, null, 2)}\n\n### Task Ideas\n${JSON.stringify(d.task_ideas, null, 2)}\n\n### Screener\n${JSON.stringify(d.screener, null, 2)}\n\n`;
+    hypotheses?.forEach((h: any, i: number) => {
+      md += `## ${i + 1}. ${h.title}\n`;
+      md += `**Statement:** ${h.statement}\n\n`;
+      md += `**Research Question:** ${h.research_question || 'N/A'}\n\n`;
+      md += `**Evidence Strength:** ${h.evidence_strength || 'N/A'}\n\n`;
+      md += `### Why We Believe It\n${h.details?.why || 'N/A'}\n\n`;
+      md += `### Counter-Evidence\n${h.details?.counter || 'None identified'}\n\n`;
+      md += `### What Would Disprove It\n${h.details?.disprove || 'N/A'}\n\n`;
+      md += `---\n\n`;
     });
 
     const blob = new Blob([md], { type: 'text/markdown' });
@@ -34,110 +30,72 @@ export default function HandoffClient({ handoff }: { handoff: any }) {
 
   return (
     <div className="space-y-8">
-      <Card className="bg-gray-50 border-blue-100">
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-xl text-blue-900">Decision Summary</CardTitle>
-            <Button variant="outline" size="sm" onClick={downloadMarkdown}>
-              <FileDown className="h-4 w-4 mr-2" /> Export All (Markdown)
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-gray-800">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <h4 className="font-semibold text-blue-800 mb-1">D1: Hypotheses to validate</h4>
-              {decisions.D1.length > 0 ? (
-                <ul className="list-disc pl-5">
-                  {decisions.D1.map((h: any) => (
-                    <li key={h.hypothesis_id} className="font-medium">{h.hypothesis_id}: {h.title}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500">None met the evidence threshold.</p>
-              )}
-            </div>
-            <div>
-              <h4 className="font-semibold text-blue-800 mb-1">D2: Segments to recruit</h4>
-              <p>{decisions.D2}</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-blue-800 mb-1">D3: Archetype deep dive</h4>
-              <p className="font-medium capitalize">{decisions.D3.replace(/_/g, ' ')}</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-blue-800 mb-1">D4: Kill list</h4>
-              <p>{decisions.D4}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex justify-between items-center bg-gray-50 p-4 border border-blue-100 rounded-lg">
+        <h2 className="text-xl font-semibold text-blue-900">Ranked Research Hypotheses</h2>
+        <Button variant="outline" size="sm" onClick={downloadMarkdown}>
+          <FileDown className="h-4 w-4 mr-2" /> Export Briefing (Markdown)
+        </Button>
+      </div>
 
       <div className="space-y-6">
-        <h3 className="text-xl font-bold border-b pb-2">AI-Drafted Research Assets</h3>
-        
-        {(!drafts || drafts.length === 0) && (
+        {!hypotheses || hypotheses.length === 0 ? (
           <div className="p-8 text-center bg-gray-50 border border-dashed rounded-md text-gray-500">
-            Not generated yet. Run the <code className="bg-white px-1 border rounded">handoff</code> command in the pipeline to generate assets.
+            No data-derived hypotheses found.
           </div>
-        )}
-
-        {drafts?.map((draft: any) => {
-          const stringifyList = (item: any) => {
-            if (Array.isArray(item)) return item.map((x: string) => `• ${x}`).join('\n');
-            if (typeof item === 'object') return Object.entries(item).map(([k, v]) => `${k}: ${v}`).join('\n');
-            return String(item);
-          };
-
-          return (
-            <Card key={draft.hypothesis_id}>
-              <CardHeader className="flex flex-row items-center justify-between bg-gray-50 border-b pb-4">
-                <CardTitle className="text-lg flex items-center gap-3">
-                  {draft.hypothesis_id} Assets
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">AI Draft</Badge>
-                </CardTitle>
-                <div className="text-xs text-gray-400">Generated: {new Date(draft.generated_at).toLocaleString()} using {draft.model_id}</div>
+        ) : (
+          hypotheses.map((h: any, i: number) => (
+            <Card key={h.hypothesis_id || i}>
+              <CardHeader className="flex flex-row items-start justify-between bg-gray-50/50 border-b pb-4">
+                <div className="space-y-1 pr-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl font-bold text-gray-400">#{i + 1}</span>
+                    <CardTitle className="text-lg">{h.title}</CardTitle>
+                  </div>
+                  <p className="text-sm font-medium text-gray-700 italic border-l-2 border-blue-400 pl-3 ml-8">
+                    {h.statement}
+                  </p>
+                </div>
+                {h.evidence_strength && (
+                  <Badge variant={h.evidence_strength === 'strong' ? 'default' : 'secondary'} className="capitalize shrink-0">
+                    {h.evidence_strength} Evidence
+                  </Badge>
+                )}
               </CardHeader>
               <CardContent className="p-0">
-                <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x">
-                  <div className="p-6 space-y-3 relative group">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-semibold text-gray-800">Interview Questions</h4>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(stringifyList(draft.interview_questions))}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
+                  <div className="p-6 space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-green-700 mb-1 flex items-center gap-1.5">
+                        <span className="text-lg leading-none">•</span> Why We Believe It
+                      </h4>
+                      <p className="text-gray-700 text-sm leading-relaxed">{h.details?.why || 'N/A'}</p>
                     </div>
-                    <div className="text-sm whitespace-pre-wrap text-gray-600 font-mono bg-gray-50 p-3 rounded">
-                      {stringifyList(draft.interview_questions)}
+                    <div>
+                      <h4 className="font-semibold text-amber-700 mb-1 flex items-center gap-1.5">
+                        <span className="text-lg leading-none">•</span> Counter-Evidence
+                      </h4>
+                      <p className="text-gray-700 text-sm leading-relaxed">{h.details?.counter || 'None identified'}</p>
                     </div>
-                  </div>
-                  <div className="p-6 space-y-3 relative group">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-semibold text-gray-800">Task Ideas</h4>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(stringifyList(draft.task_ideas))}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="text-sm whitespace-pre-wrap text-gray-600 font-mono bg-gray-50 p-3 rounded">
-                      {stringifyList(draft.task_ideas)}
+                    <div>
+                      <h4 className="font-semibold text-red-700 mb-1 flex items-center gap-1.5">
+                        <span className="text-lg leading-none">•</span> What Would Disprove It
+                      </h4>
+                      <p className="text-gray-700 text-sm leading-relaxed">{h.details?.disprove || 'N/A'}</p>
                     </div>
                   </div>
-                  <div className="p-6 space-y-3 relative group">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-semibold text-gray-800">Screener Criteria</h4>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(stringifyList(draft.screener))}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="text-sm whitespace-pre-wrap text-gray-600 font-mono bg-gray-50 p-3 rounded">
-                      {stringifyList(draft.screener)}
+                  <div className="p-6 bg-blue-50/30 flex flex-col">
+                    <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                      Recommended Research Question
+                    </h4>
+                    <div className="bg-white p-4 rounded-md border border-blue-100 shadow-sm text-blue-900 font-medium text-sm flex-1 whitespace-pre-wrap">
+                      {h.research_question || 'N/A'}
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          );
-        })}
+          ))
+        )}
       </div>
     </div>
   )

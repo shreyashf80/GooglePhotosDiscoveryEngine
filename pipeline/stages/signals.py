@@ -29,12 +29,16 @@ class SignalExtraction(BaseModel):
     mentions_ask_photos: bool
     quote_original: str
     quote_en: str
+    is_signal: bool = Field(default=True)
+    not_signal_reason: str = Field(default="")
+    remembered: List[str] = Field(default_factory=list)
+    forgot: List[str] = Field(default_factory=list)
 
 def run_signals(limit: Optional[int] = None) -> dict:
     pool = KeyPool(keys=GEMINI_API_KEYS, rpm_per_key=GEMINI_RPM_PER_KEY)
     client = GeminiClient(key_pool=pool, model_id=GEMINI_EXTRACT_MODEL)
     
-    with open(PROMPTS_DIR / "signals_v1.md", "r", encoding="utf-8") as f:
+    with open(PROMPTS_DIR / "signals_v2.md", "r", encoding="utf-8") as f:
         prompt_template = f.read()
 
     # Define scope mapping
@@ -87,10 +91,12 @@ def run_signals(limit: Optional[int] = None) -> dict:
                                 signal_id, record_id, summary_en, is_success, outcome,
                                 emotional_cost, frequency, product, platform,
                                 mentions_ask_photos, quote_original, quote_en,
-                                is_duplicate, prompt_version, model_id
+                                is_duplicate, prompt_version, model_id,
+                                is_signal, not_signal_reason, remembered, forgot
                             ) VALUES (
                                 :sid, :rid, :sum, :succ, :out, :emo, :freq, :prod, :plat,
-                                :ask, :qo, :qe, FALSE, 'signals_v1', :model
+                                :ask, :qo, :qe, FALSE, 'signals_v2', :model,
+                                :is_sig, :ns_reason, :rem, :forg
                             ) ON CONFLICT (signal_id) DO NOTHING
                         """),
                         {
@@ -98,7 +104,11 @@ def run_signals(limit: Optional[int] = None) -> dict:
                             "succ": res['is_success'], "out": res['outcome'], "emo": res['emotional_cost'],
                             "freq": res['frequency'], "prod": res['product'], "plat": res['platform'],
                             "ask": res['mentions_ask_photos'], "qo": res['quote_original'], "qe": res['quote_en'],
-                            "model": GEMINI_EXTRACT_MODEL
+                            "model": GEMINI_EXTRACT_MODEL,
+                            "is_sig": res.get('is_signal', True),
+                            "ns_reason": res.get('not_signal_reason', ""),
+                            "rem": json.dumps(res.get('remembered', [])),
+                            "forg": json.dumps(res.get('forgot', []))
                         }
                     )
                     counts["extracted"] += 1

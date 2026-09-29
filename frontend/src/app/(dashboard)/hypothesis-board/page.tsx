@@ -3,12 +3,9 @@ import HypothesisBoardClient from './client'
 import { Suspense } from 'react'
 
 async function HypothesisData() {
-  const [hypotheses, emergent] = await Promise.all([
-    fetchApi<any[]>('/hypotheses'),
-    fetchApi<any[]>('/emergent-labels').catch(() => [])
-  ])
+  const hypotheses = await fetchApi<any[]>('/hypotheses')
   
-  return <HypothesisBoardClient hypotheses={hypotheses} emergent={emergent} />
+  return <HypothesisBoardClient hypotheses={hypotheses} />
 }
 
 export default function HypothesisBoardPage() {

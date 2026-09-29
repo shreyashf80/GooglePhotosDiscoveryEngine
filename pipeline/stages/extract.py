@@ -599,24 +599,25 @@ def run_extract(limit: Optional[int] = None, reprocess: bool = False) -> dict:
 
                     # Persist episodes and child tables
                     try:
-                        ep_count = _persist_extraction(
-                            record_id=rid,
-                            extraction=extraction,
-                            prompt_version=PROMPT_VERSION,
-                            model_id=model_id,
-                            conn=conn,
-                        )
+                        with conn.begin_nested():
+                            ep_count = _persist_extraction(
+                                record_id=rid,
+                                extraction=extraction,
+                                prompt_version=PROMPT_VERSION,
+                                model_id=model_id,
+                                conn=conn,
+                            )
 
-                        # Advance status
-                        conn.execute(
-                            text("""
-                                UPDATE raw_records
-                                SET status = 'extracted',
-                                    run_id = :run_id
-                                WHERE record_id = :id
-                            """),
-                            {"id": rid, "run_id": run_id},
-                        )
+                            # Advance status
+                            conn.execute(
+                                text("""
+                                    UPDATE raw_records
+                                    SET status = 'extracted',
+                                        run_id = :run_id
+                                    WHERE record_id = :id
+                                """),
+                                {"id": rid, "run_id": run_id},
+                            )
 
                         counts["episodes_created"] += ep_count
                         counts["records_extracted"] += 1

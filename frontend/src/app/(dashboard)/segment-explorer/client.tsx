@@ -8,20 +8,18 @@ export default function SegmentClient({ initialSegments, currentDimension }: { i
   const router = useRouter();
   
   const dimensions = [
-    { id: 'photo_group', label: 'Photo Category' },
-    { id: 'photo_origin', label: 'Photo Origin' },
-    { id: 'platform', label: 'Platform' },
-    { id: 'language', label: 'Language' },
-    { id: 'role_hints', label: 'Role Hints' },
+    { id: 'source', label: 'Source' },
     { id: 'product', label: 'Product' },
+    { id: 'class', label: 'Relevance Class' },
+    { id: 'language', label: 'Language' },
   ];
 
   const handleDimensionChange = (val: string) => {
     router.push(`?dimension=${val}`);
   }
 
-  // Extract unique archetypes and dimension values
-  const archetypes = Array.from(new Set(initialSegments.map(s => s.archetype))).sort();
+  // Extract unique themes and dimension values
+  const themes = Array.from(new Set(initialSegments.map(s => s.archetype))).sort();
   const values = Array.from(new Set(initialSegments.map(s => s.value))).sort();
 
   // Helper to map 0-1 gave_up_rate to a color intensity
@@ -53,7 +51,7 @@ export default function SegmentClient({ initialSegments, currentDimension }: { i
         <table className="w-full text-sm text-left">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-4 py-3 font-semibold text-gray-900 sticky left-0 bg-gray-50 border-r z-10 w-48">Archetype</th>
+              <th className="px-4 py-3 font-semibold text-gray-900 sticky left-0 bg-gray-50 border-r z-10 w-48">Theme</th>
               {values.map(val => (
                 <th key={val} className="px-4 py-3 font-semibold text-gray-900 text-center min-w-[120px]">
                   <EnumLabel value={val} />
@@ -62,18 +60,18 @@ export default function SegmentClient({ initialSegments, currentDimension }: { i
             </tr>
           </thead>
           <tbody>
-            {archetypes.map((arch, idx) => (
-              <tr key={arch} className="border-b last:border-0 hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900 sticky left-0 bg-white border-r z-10 truncate" title={arch}>
-                  <EnumLabel value={arch} />
+            {themes.map((theme, idx) => (
+              <tr key={theme} className="border-b last:border-0 hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-gray-900 sticky left-0 bg-white border-r z-10 truncate" title={theme}>
+                  <EnumLabel value={theme} />
                 </td>
                 {values.map(val => {
-                  const cell = initialSegments.find(s => s.archetype === arch && s.value === val);
+                  const cell = initialSegments.find(s => s.archetype === theme && s.value === val);
                   if (!cell) {
                     return <td key={val} className="px-4 py-3 text-center text-gray-300">-</td>;
                   }
                   
-                  const count = cell.counts || 0;
+                  const count = cell.episode_count || cell.counts || 0;
                   const gaveUpRate = cell.outcome_mix?.gave_up ? cell.outcome_mix.gave_up / count : 0;
                   const isAnecdotal = count < 10;
                   
@@ -82,12 +80,12 @@ export default function SegmentClient({ initialSegments, currentDimension }: { i
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger className={`p-3 w-full rounded-md text-center border font-semibold flex flex-col justify-center items-center h-16 ${getHeatmapColor(gaveUpRate, count)}`}>
-                            <ClickableCount count={count} filters={{ archetype: arch, [currentDimension === 'photo_group' ? 'category' : currentDimension === 'language' ? 'lang' : currentDimension]: val }} />
+                            <ClickableCount count={count} filters={{ theme: theme, [currentDimension === 'class' ? 'relevance_class' : currentDimension]: val }} />
                             {isAnecdotal && <span className="text-[10px] mt-1 opacity-70 font-normal uppercase tracking-wider">Anecdotal</span>}
                           </TooltipTrigger>
                           <TooltipContent>
                             <div className="text-xs space-y-1">
-                              <p><strong>Archetype:</strong> {arch}</p>
+                              <p><strong>Theme:</strong> {theme}</p>
                               <p><strong>{dimensions.find(d => d.id === currentDimension)?.label}:</strong> {val}</p>
                               <p><strong>Episodes:</strong> {count}</p>
                               {!isAnecdotal && <p><strong>Gave-up rate:</strong> {(gaveUpRate * 100).toFixed(0)}%</p>}
