@@ -80,29 +80,66 @@ def _compute_segment_stats(signals_with_meta):
                 })
     return stats
 
-def run_analyze() -> dict:
+def _compute_cue_stats(episodes: list[dict], cues_by_episode: dict, forgotten_cues: list[dict]) -> list[dict]:
+    total = len(episodes)
+    if total == 0:
+        return []
+    cue_types = set()
+    for eid, cues in cues_by_episode.items():
+        for c in cues:
+            cue_types.add(c["cue_type"])
+    for fc in forgotten_cues:
+        cue_types.add(fc["cue_type"])
+    stats = []
+    for ct in sorted(cue_types):
+        eps_with_cue = [ep for ep in episodes if any(c["cue_type"] == ct for c in cues_by_episode.get(ep["episode_id"], []))]
+        remembered_share = len(eps_with_cue) / total if total > 0 else 0.0
+        precisions = [c["precision"] for ep in eps_with_cue for c in cues_by_episode.get(ep["episode_id"], []) if c["cue_type"] == ct]
+        total_p = len(precisions)
+        p_exact = precisions.count("exact") / total_p if total_p else 0.0
+        p_approx = precisions.count("approximate") / total_p if total_p else 0.0
+        p_vague = precisions.count("vague") / total_p if total_p else 0.0
+        forgotten_count = sum(1 for fc in forgotten_cues if fc["cue_type"] == ct)
+        
+        eps_failed = [ep for ep in eps_with_cue if ep["outcome"] in ("gave_up", "still_searching", "found_with_effort")]
+        failure_rate = len(eps_failed) / len(eps_with_cue) if eps_with_cue else 0.0
+        
+        stats.append({
+            "cue_type": ct,
+            "remembered_share": remembered_share,
+            "precision_exact": p_exact,
+            "precision_approximate": p_approx,
+            "precision_vague": p_vague,
+            "forgotten_count": forgotten_count,
+            "failure_rate": failure_rate
+        })
+    return stats
+
+def run_analyze(run_substages: bool = False) -> dict:
     now = datetime.now(timezone.utc)
     
-    logger.info("Running Signals extraction...")
-    counts_signals = run_signals()
-    logger.info(f"Signals extracted: {counts_signals}")
-    
-    logger.info("Running Embedding (includes dedup)...")
-    counts_embed = run_embed()
-    logger.info(f"Embeddings generated: {counts_embed}")
-    
-    logger.info("Running Themes clustering...")
-    counts_themes = run_themes()
-    logger.info(f"Themes generated: {counts_themes}")
-    
-    logger.info("Running Hypothesis Derivation...")
-    counts_derive = run_derive()
-    logger.info(f"Hypotheses derived: {counts_derive}")
+    counts_signals = {}
+    counts_embed = {}
+    counts_themes = {}
+    counts_derive = {}
 
-    # Fetch data for Funnel and Segments
+    if run_substages:
+        logger.info("Running Embedding (includes dedup)...")
+        counts_embed = run_embed()
+        logger.info(f"Embeddings generated: {counts_embed}")
+        
+        logger.info("Running Themes clustering...")
+        counts_themes = run_themes()
+        logger.info(f"Themes generated: {counts_themes}")
+        
+        logger.info("Running Hypothesis Derivation...")
+        counts_derive = run_derive()
+        logger.info(f"Hypotheses derived: {counts_derive}")
+
+    # Fetch data for Funnel, Segments, and Cues
     with engine.begin() as conn:
         reason_rows = conn.execute(text("""
-            SELECT sr.funnel_stage, r.scope, s.outcome
+            SELECT sr.funnel_stage, r.scope, s.outcome, sr.theme_id
             FROM signal_reasons sr
             JOIN signals s ON sr.signal_id = s.signal_id
             JOIN raw_records r ON s.record_id = r.record_id
@@ -110,27 +147,59 @@ def run_analyze() -> dict:
         """)).fetchall()
         
         signal_rows = conn.execute(text("""
-            SELECT s.signal_id, s.outcome, s.product, r.source, r.relevance_class, r.lang,
-                   (SELECT t.name FROM themes t JOIN signal_reasons sr2 ON sr2.theme_id = t.id WHERE sr2.signal_id = s.signal_id LIMIT 1) as theme_name
+            SELECT s.signal_id, s.outcome, 'Google Photos' as product, r.source, r.relevance_class, r.lang,
+                   (SELECT t.name FROM themes t JOIN signal_reasons sr ON sr.theme_id = t.id WHERE sr.signal_id = s.signal_id LIMIT 1) as theme_name
             FROM signals s
             JOIN raw_records r ON s.record_id = r.record_id
             WHERE s.is_duplicate = FALSE
         """)).fetchall()
 
-    reasons_with_scope = [{'funnel_stage': r.funnel_stage, 'scope': r.scope, 'outcome': r.outcome} for r in reason_rows]
+        # Episodes and cues for gap matrix
+        ep_rows = conn.execute(text("""
+            SELECT episode_id, outcome FROM episodes WHERE is_duplicate = FALSE
+        """)).fetchall()
+        cue_rows = conn.execute(text("""
+            SELECT episode_id, cue_type, precision FROM episode_cues
+        """)).fetchall()
+        forgotten_rows = conn.execute(text("""
+            SELECT episode_id, cue_type FROM episode_forgotten
+        """)).fetchall()
+        caps_rows = conn.execute(text("""
+            SELECT cue_type, searchable FROM capability_reference
+        """)).fetchall()
+
+    caps = {r.cue_type: r.searchable for r in caps_rows}
+    episodes = [dict(r._mapping) for r in ep_rows]
+    cues_by_episode = defaultdict(list)
+    for c in cue_rows:
+        cues_by_episode[c.episode_id].append({"cue_type": c.cue_type, "precision": c.precision})
+    forgotten_cues = [dict(r._mapping) for r in forgotten_rows]
+
+    cue_stats = _compute_cue_stats(episodes, cues_by_episode, forgotten_cues)
+
+    reasons_with_scope = [{'funnel_stage': r.funnel_stage, 'scope': r.scope, 'outcome': r.outcome, 'theme_id': r.theme_id} for r in reason_rows]
     signals_with_meta = [dict(r._mapping) for r in signal_rows]
 
     funnel_stats = _compute_funnel_stats(reasons_with_scope)
     segment_stats = _compute_segment_stats(signals_with_meta)
-
-    # Note: Gap matrix depends on cue_stats which comes from episodes. 
-    # We keep the old logic for cues / episodes just by recalculating gap_scores if needed, but not recreating cue_stats from scratch since extract v2 still generates episodes.
-    # The requirement is: "Extract v2 - Keep, narrow... gap matrix, cue stats, capability reference... keep"
-    # We won't recompute cue_stats here, assume they are already computed by earlier `analyze` or we just leave them.
-    # We'll just overwrite funnel and segment stats.
+    
+    # Calculate funnel stages per theme
+    theme_funnels = defaultdict(Counter)
+    for r in reasons_with_scope:
+        if r['theme_id']:
+            theme_funnels[r['theme_id']][r['funnel_stage']] += 1
     
     with engine.begin() as conn:
-        # Funnel Stats (using stage for scope if we need to shoehorn into existing schema, wait, funnel_stats doesn't have scope column, I'll store scope in details or append to stage)
+        for theme_id, counts in theme_funnels.items():
+            row = conn.execute(text("SELECT mixes FROM themes WHERE id = :id"), {"id": theme_id}).fetchone()
+            if row:
+                mixes = row.mixes or {}
+                if isinstance(mixes, str):
+                    mixes = json.loads(mixes)
+                mixes["funnel_stages"] = dict(counts)
+                conn.execute(text("UPDATE themes SET mixes = :mixes WHERE id = :id"), {"mixes": json.dumps(mixes), "id": theme_id})
+                
+        # Funnel Stats
         conn.execute(text("DELETE FROM funnel_stats"))
         for f in funnel_stats:
             conn.execute(text("""
@@ -146,6 +215,7 @@ def run_analyze() -> dict:
                 "details": f["details"], "computed_at": now,
             })
 
+        # Segment Stats
         conn.execute(text("DELETE FROM segment_stats"))
         for ss in segment_stats:
             conn.execute(text("""
@@ -155,12 +225,27 @@ def run_analyze() -> dict:
                 "d": ss["dimension"], "v": ss["value"], "a": ss["archetype"], "c": ss["episode_count"], "om": json.dumps(ss["outcome_mix"])
             })
 
+        # Cue Stats / Gap Matrix
+        if cue_stats:
+            conn.execute(text("DELETE FROM cue_stats"))
+            for c in cue_stats:
+                searchable = caps.get(c["cue_type"], "not_verified")
+                gap = compute_gap_score(c["remembered_share"], searchable) if searchable != "not_verified" else None
+                conn.execute(text("""
+                    INSERT INTO cue_stats (cue_type, remembered_share, precision_exact, precision_approximate, precision_vague, forgotten_count, failure_rate, gap_score, computed_at)
+                    VALUES (:ct, :rs, :pe, :pa, :pv, :fc, :fr, :gs, :ca)
+                """), {
+                    "ct": c["cue_type"], "rs": c["remembered_share"], "pe": c["precision_exact"], "pa": c["precision_approximate"], "pv": c["precision_vague"],
+                    "fc": c["forgotten_count"], "fr": c["failure_rate"], "gs": gap, "ca": now
+                })
+
     return {
         "signals_extracted": counts_signals.get("extracted", 0),
         "themes_created": counts_themes.get("themes_created", 0),
         "hypotheses_derived": counts_derive.get("derived", 0),
         "funnel_stages_written": len(funnel_stats),
-        "segments_written": len(segment_stats)
+        "segments_written": len(segment_stats),
+        "cues_written": len(cue_stats)
     }
 
 if __name__ == "__main__":

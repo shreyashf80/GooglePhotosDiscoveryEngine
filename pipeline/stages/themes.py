@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import cosine_distances
 import numpy as np
 
 from pipeline.db import engine, execute_sql
-from pipeline.llm.client import GeminiClient
+from pipeline.llm.client import get_client
 from pipeline.llm.key_pool import KeyPool
 from pipeline.config import GEMINI_EXTRACT_MODEL, GEMINI_API_KEYS, GEMINI_RPM_PER_KEY, PROMPTS_DIR
 
@@ -19,8 +19,7 @@ class ThemeNaming(BaseModel):
     description: str
 
 def run_themes() -> dict:
-    pool = KeyPool(keys=GEMINI_API_KEYS, rpm_per_key=GEMINI_RPM_PER_KEY)
-    client = GeminiClient(key_pool=pool, model_id=GEMINI_EXTRACT_MODEL)
+    client = get_client("extract")
     
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM themes"))
@@ -29,11 +28,11 @@ def run_themes() -> dict:
         theme_prompt_template = f.read()
     
     reasons = execute_sql("""
-        SELECT sr.id, sr.text, sr.embedding, r.scope, r.author_hash, r.source, s.outcome
+        SELECT sr.id as id, sr.text, sr.embedding, r.scope, r.author_hash, r.source, s.outcome, s.quote_en
         FROM signal_reasons sr
         JOIN signals s ON sr.signal_id = s.signal_id
         JOIN raw_records r ON s.record_id = r.record_id
-        WHERE sr.embedding IS NOT NULL AND s.is_duplicate = FALSE AND s.is_signal = TRUE
+        WHERE sr.embedding IS NOT NULL AND s.is_duplicate = FALSE
     """)
     
     if not reasons:
@@ -95,25 +94,44 @@ def run_themes() -> dict:
             sample_texts = list(set([r['text'] for r in cluster_reasons]))[:25]
             prompt = theme_prompt_template.replace("{{REASONS_JSON}}", json.dumps(sample_texts))
             
-            try:
-                res = client.generate(prompt=prompt, response_schema=ThemeNaming)
-                theme_id = scope + "_" + res['name'].replace(" ", "_").lower()
-            except Exception as e:
-                logger.error(f"Error generating theme name: {e}. Using fallback.")
+            res = None
+            theme_id = None
+            for attempt in range(3):
+                try:
+                    res = client.generate(prompt=prompt, response_schema=ThemeNaming)
+                    import re
+                    name = res.get('name') or res.get('theme') or res.get('theme_name') or f"Theme {i}"
+                    desc = res.get('description') or res.get('desc') or f"Description for {scope} theme {i}"
+                    res['name'] = name
+                    res['description'] = desc
+                    clean_name = re.sub(r'[^a-zA-Z0-9_]+', '_', name.lower()).strip('_')
+                    theme_id = f"{scope}_{clean_name[:40]}"
+                    break
+                except Exception as e:
+                    logger.error(f"Attempt {attempt + 1} failed generating theme name: {e}")
+            
+            if not res or not theme_id:
+                logger.error(f"All attempts failed. Using fallback.")
                 res = {"name": f"Mock Theme {scope} {i}", "description": f"Fallback description for {scope} theme {i}"}
                 theme_id = scope + f"_mock_theme_{i}"
+                
             print(f"Saving theme {theme_id}...")
                 
+            import random
+            quotes = list(set([r['quote_en'] for r in cluster_reasons if r.get('quote_en')]))
+            selected_quotes = random.sample(quotes, min(5, len(quotes)))
+            
             with engine.begin() as conn:
                 conn.execute(
                     text("""
-                        INSERT INTO themes (id, scope, name, description, signals, distinct_authors, sources_count, severe_share, rank_score, evidence_strength, mixes)
-                        VALUES (:tid, :scp, :nm, :desc, :sig, :da, :src, :ss, :rs, :es, :mix)
+                        INSERT INTO themes (id, scope, name, description, signals, distinct_authors, sources_count, severe_share, rank_score, evidence_strength, mixes, quotes)
+                        VALUES (:tid, :scp, :nm, :desc, :sig, :da, :src, :ss, :rs, :es, :mix, :quotes)
                     """),
                     {
                         "tid": theme_id, "scp": scope, "nm": res['name'], "desc": res['description'],
                         "sig": signal_count, "da": distinct_authors, "src": len(sources.keys()),
-                        "ss": severe_share, "rs": rank_score, "es": ev_str, "mix": json.dumps({"sources": sources})
+                        "ss": severe_share, "rs": rank_score, "es": ev_str, "mix": json.dumps({"sources": sources}),
+                        "quotes": json.dumps(selected_quotes)
                     }
                 )
                 for r in cluster_reasons:

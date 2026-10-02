@@ -1,14 +1,13 @@
 import Link from 'next/link'
 import { ReactNode } from 'react'
 
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
 
 const navItems = [
   { name: 'Overview', href: '/' },
   { name: 'Themes', href: '/themes' },
   { name: 'Hypothesis board', href: '/hypothesis-board' },
   { name: 'Gap matrix', href: '/gap-matrix' },
-  { name: 'Segment explorer', href: '/segment-explorer', p1: true },
   { name: 'Evidence browser', href: '/evidence-browser' },
   { name: 'Ask the corpus', href: '/ask' },
   { name: 'Research handoff', href: '/research-handoff', p1: true },

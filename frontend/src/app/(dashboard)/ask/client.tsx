@@ -137,7 +137,7 @@ export default function AskClient() {
   };
 
   const handleSignalOpen = (signalId: string) => {
-    window.open(`/evidence-browser?search=${encodeURIComponent(signalId)}`, '_blank');
+    window.open(`/evidence-browser?signal_id=${encodeURIComponent(signalId)}`, '_blank');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

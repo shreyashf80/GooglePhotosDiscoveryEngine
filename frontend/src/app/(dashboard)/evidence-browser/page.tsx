@@ -6,13 +6,22 @@ import { LoadingState } from '@/components/shared/components'
 export const revalidate = 300;
 
 async function EvidenceData({ searchParams }: { searchParams: Record<string, string> }) {
-  const params = new URLSearchParams(searchParams as Record<string, string>);
+  const queryObj: Record<string, string> = {};
+  if (searchParams && typeof searchParams === 'object') {
+    for (const [k, v] of Object.entries(searchParams)) {
+      if (typeof v === 'string') {
+        queryObj[k] = v;
+      }
+    }
+  }
+  const params = new URLSearchParams(queryObj);
   const data = await fetchApi<any>(`/signals?${params.toString()}`);
   const themes = await fetchApi<any[]>('/themes').catch(() => []);
-  return <EvidenceClient initialData={data} themes={themes} searchParams={searchParams} />
+  return <EvidenceClient initialData={data} themes={themes} searchParams={queryObj} />
 }
 
-export default function EvidenceBrowserPage({ searchParams }: { searchParams: Record<string, string> }) {
+export default async function EvidenceBrowserPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+  const resolvedParams = (await searchParams) || {};
   return (
     <div className="space-y-6">
       <div>
@@ -20,7 +29,7 @@ export default function EvidenceBrowserPage({ searchParams }: { searchParams: Re
         <p className="text-muted-foreground mt-2">Filter and read through individual retrieval episodes.</p>
       </div>
       <Suspense fallback={<LoadingState />}>
-        <EvidenceData searchParams={searchParams} />
+        <EvidenceData searchParams={resolvedParams} />
       </Suspense>
     </div>
   )

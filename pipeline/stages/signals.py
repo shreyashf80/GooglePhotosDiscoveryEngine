@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from pipeline.db import engine, execute_sql
-from pipeline.llm.client import GeminiClient
+from pipeline.llm.client import get_client
 from pipeline.llm.key_pool import KeyPool
 from pipeline.config import PROMPTS_DIR, GEMINI_EXTRACT_MODEL, GEMINI_API_KEYS, GEMINI_RPM_PER_KEY
 
@@ -35,8 +35,7 @@ class SignalExtraction(BaseModel):
     forgot: List[str] = Field(default_factory=list)
 
 def run_signals(limit: Optional[int] = None) -> dict:
-    pool = KeyPool(keys=GEMINI_API_KEYS, rpm_per_key=GEMINI_RPM_PER_KEY)
-    client = GeminiClient(key_pool=pool, model_id=GEMINI_EXTRACT_MODEL)
+    client = get_client("extract")
     
     with open(PROMPTS_DIR / "signals_v2.md", "r", encoding="utf-8") as f:
         prompt_template = f.read()

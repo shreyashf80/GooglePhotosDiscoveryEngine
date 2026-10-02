@@ -6,7 +6,7 @@ import { PipelineFunnelChart, BreakdownChart } from './client'
 import { Suspense } from 'react'
 import Link from 'next/link'
 
-async function OverviewData() {
+export default async function OverviewPage() {
   const overview = await fetchApi<any>('/overview')
 
   const { kpis, funnel, breakdowns, signal_breakdowns, pipeline_health, top_themes } = overview
@@ -73,7 +73,7 @@ async function OverviewData() {
                 <tbody>
                   {top_themes?.map((t: any) => (
                     <tr key={t.id} className="bg-white border-b hover:bg-gray-50">
-                      <td className="px-4 py-2 font-medium">{t.title}</td>
+                      <td className="px-4 py-2 font-medium">{t.name}</td>
                       <td className="px-4 py-2">{t.rank_score?.toFixed(2)}</td>
                       <td className="px-4 py-2 capitalize">{t.scope}</td>
                       <td className="px-4 py-2">
@@ -117,13 +117,5 @@ async function OverviewData() {
         </Card>
       </div>
     </div>
-  )
-}
-
-export default function OverviewPage() {
-  return (
-    <Suspense fallback={<div className="animate-pulse p-8">Loading overview...</div>}>
-      <OverviewData />
-    </Suspense>
   )
 }

@@ -160,7 +160,10 @@ async def list_hypotheses():
     cached = get_cached("hypotheses")
     if cached: return cached
     query = """
-        SELECT h.*, t.scope
+        SELECT h.*, 
+            CASE WHEN h.theme_id LIKE 'core_%' THEN 'core' 
+                 WHEN h.theme_id LIKE 'adjacent_%' THEN 'adjacent' 
+                 ELSE t.scope END as scope
         FROM hypotheses h
         LEFT JOIN themes t ON h.theme_id = t.id
         WHERE h.origin = 'data_derived'
@@ -219,27 +222,27 @@ async def list_signals(
     funnel_stage: Optional[str] = None,
     outcome: Optional[str] = None
 ):
-    where = ["s.is_signal = TRUE"]
+    where = ["1=1"]
     params = {}
     
     if scope:
         where.append("r.scope = :scope")
         params["scope"] = scope
-    if relevance_class:
-        where.append("r.relevance_class = :relevance_class")
-        params["relevance_class"] = relevance_class
-    if theme:
-        where.append("EXISTS (SELECT 1 FROM signal_reasons sr WHERE sr.signal_id = s.signal_id AND sr.theme_id = :theme)")
-        params["theme"] = theme
     if source:
         where.append("r.source = :source")
         params["source"] = source
-    if product:
-        where.append("s.product = :product")
-        params["product"] = product
     if outcome:
         where.append("s.outcome = :outcome")
         params["outcome"] = outcome
+    if relevance_class:
+        where.append("r.relevance_class = :relevance_class")
+        params["relevance_class"] = relevance_class
+    if product:
+        where.append("s.product = :product")
+        params["product"] = product
+    if theme:
+        where.append("EXISTS (SELECT 1 FROM signal_reasons sr WHERE sr.signal_id = s.signal_id AND sr.theme_id = :theme)")
+        params["theme"] = theme
     if funnel_stage:
         where.append("EXISTS (SELECT 1 FROM signal_reasons sr WHERE sr.signal_id = s.signal_id AND sr.funnel_stage = :funnel_stage)")
         params["funnel_stage"] = funnel_stage
@@ -249,11 +252,22 @@ async def list_signals(
     count_q = f"SELECT count(*) as c FROM signals s JOIN raw_records r ON s.record_id = r.record_id {where_clause}"
     
     data_q = f"""
-        SELECT s.*, r.source, r.lang, r.created_at, r.url, r.scope, r.relevance_class, t.name AS theme_name
+        SELECT 
+            s.signal_id, 
+            s.summary_en, 
+            s.emotional_cost, 
+            s.outcome, 
+            s.quote_en, 
+            s.quote_original, 
+            r.scope, 
+            r.source, 
+            r.created_at, 
+            r.lang, 
+            r.url,
+            s.remembered,
+            s.forgot
         FROM signals s
         JOIN raw_records r ON s.record_id = r.record_id
-        LEFT JOIN (SELECT signal_id, MAX(theme_id) as theme_id FROM signal_reasons GROUP BY signal_id) sr ON sr.signal_id = s.signal_id
-        LEFT JOIN themes t ON t.id = sr.theme_id
         {where_clause}
         ORDER BY r.created_at DESC NULLS LAST
         LIMIT :limit OFFSET :offset
@@ -368,18 +382,6 @@ async def list_literature():
     set_cached("literature", res)
     return res
 
-@router.get("/segments")
-async def get_segments(dimension: str):
-    allowed = ["source", "product", "class", "language", "photo_group", "photo_origin", "platform"]
-    if dimension not in allowed:
-        return []
-        
-    cached = get_cached(f"segments_{dimension}")
-    if cached: return cached
-    
-    data = await execute_query("SELECT * FROM segment_stats WHERE dimension = :d", {"d": dimension})
-    set_cached(f"segments_{dimension}", data)
-    return data
 
 @router.get("/handoff")
 async def get_handoff():
@@ -405,7 +407,7 @@ async def get_handoff():
         "hypotheses": hyps or [],
         "decisions": {
             "D1": d1 or [],
-            "D2": "See top segments in segment explorer",
+            "D2": "Not determined",
             "D3": "Not determined",
             "D4": "Not prioritized for D4"
         },

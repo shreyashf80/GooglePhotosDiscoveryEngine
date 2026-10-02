@@ -290,3 +290,189 @@ class GeminiClient:
         raise RuntimeError(
             f"Gemini API call failed after retries: {final_msg}"
         ) from last_exception
+
+
+class GroqClient:
+    """Groq API client with key rotation and structured output support."""
+
+    def __init__(self, key_pool: KeyPool, model_id: str) -> None:
+        self._key_pool = key_pool
+        self._model_id = model_id
+        self.last_tokens: dict[str, int] = {}
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    def generate(
+        self,
+        prompt: str,
+        response_schema: Type[BaseModel] | None = None,
+        system_instruction: str | None = None,
+        temperature: float = 0.2,
+    ) -> dict[str, Any]:
+        import time
+        from groq import Groq
+
+        start_time = time.time()
+        last_exception = None
+        attempt = 0
+
+        while True:
+            attempt += 1
+            key = self._key_pool.acquire()
+            key_index = self._key_pool.get_key_index(key)
+
+            try:
+                client = Groq(api_key=key, max_retries=0)
+
+                is_list_schema = False
+                if response_schema:
+                    import typing
+                    from typing import get_origin
+                    origin = get_origin(response_schema)
+                    if origin in (list, typing.List):
+                        is_list_schema = True
+
+                prompt_content = prompt
+                if is_list_schema:
+                    prompt_content += "\n\nIMPORTANT: Return a JSON object with key 'records' containing the list of items matching the schema: {\"records\": [...]}. Output ONLY valid JSON."
+                elif response_schema and "json" not in prompt_content.lower():
+                    prompt_content += "\n\nOutput ONLY valid JSON."
+
+                messages = []
+                if system_instruction:
+                    messages.append({"role": "system", "content": system_instruction})
+                messages.append({"role": "user", "content": prompt_content})
+
+                kwargs: dict[str, Any] = {
+                    "model": self._model_id,
+                    "messages": messages,
+                    "temperature": temperature,
+                }
+                
+                # Note: Groq structured JSON mode requires 'json' in the prompt and an object at the root.
+                if response_schema:
+                    kwargs["response_format"] = {"type": "json_object"}
+
+                response = client.chat.completions.create(**kwargs)
+
+                self._key_pool.report_success(key)
+
+                token_info = {}
+                if response.usage:
+                    token_info = {
+                        "input_tokens": response.usage.prompt_tokens or 0,
+                        "output_tokens": response.usage.completion_tokens or 0,
+                    }
+                    self.last_tokens = token_info
+                    logger.info("Groq call: model=%s, key_index=%d, tokens=%s", self._model_id, key_index, json.dumps(token_info))
+
+                text = response.choices[0].message.content
+                if not text:
+                    raise RuntimeError("Groq returned empty response text")
+
+                if response_schema:
+                    cleaned_text = text.strip()
+                    if cleaned_text.startswith("```"):
+                        lines = cleaned_text.splitlines()
+                        if lines[0].startswith("```"):
+                            lines = lines[1:]
+                        if lines and lines[-1].startswith("```"):
+                            lines = lines[:-1]
+                        cleaned_text = "\n".join(lines).strip()
+
+                    try:
+                        parsed = json.loads(cleaned_text)
+                    except json.JSONDecodeError as e:
+                        logger.warning("JSON parse error from model=%s, key_index=%d: %s", self._model_id, key_index, str(e))
+                        raise ValueError(f"jsondecodeerror: {e}") from e
+
+                    if is_list_schema:
+                        if isinstance(parsed, list):
+                            return parsed
+                        if isinstance(parsed, dict):
+                            for key_candidate in ("records", "items", "data", "results", "episodes"):
+                                if key_candidate in parsed and isinstance(parsed[key_candidate], list):
+                                    return parsed[key_candidate]
+                            for k, v in parsed.items():
+                                if isinstance(v, list):
+                                    return v
+                            return [parsed]
+
+                    return parsed
+
+                return {"text": text, "tokens": token_info}
+
+            except Exception as e:
+                last_exception = e
+                error_str = str(e).lower()
+
+                is_quota_error = "429" in error_str or "quota" in error_str or "rate limit" in error_str or "tpm" in error_str or "token" in error_str
+                
+                if is_quota_error:
+                    self._key_pool.report_error(key)
+                    logger.warning("Rate limit/quota on key_index=%d, rotating to next key (attempt %d)", key_index, attempt)
+                    if time.time() - start_time > 600:
+                        break
+                    time.sleep(1.0)
+                    continue
+                else:
+                    is_transient = "503" in error_str or "500" in error_str or "timeout" in error_str or "connection" in error_str
+                    if is_transient:
+                        logger.warning("Transient error: model=%s, key_index=%d, retrying...", self._model_id, key_index)
+                        if time.time() - start_time > 600:
+                            raise ServiceUnavailableError("Groq API consistently unavailable") from e
+                        time.sleep(2.0)
+                        continue
+
+                    raise RuntimeError(f"Groq API call failed: {e}") from e
+
+        raise RuntimeError(f"Groq API call failed after retries: {last_exception}") from last_exception
+
+
+class HybridClient:
+    """Tries primary client first, falls back to secondary on persistent error or exhaustion."""
+
+    def __init__(self, primary_client, fallback_client):
+        self.primary = primary_client
+        self.fallback = fallback_client
+        self.last_tokens: dict[str, int] = {}
+        
+    @property
+    def model_id(self) -> str:
+        return f"{self.primary.model_id} / {self.fallback.model_id}"
+
+    def generate(self, prompt: str, response_schema: Type[BaseModel] | None = None, system_instruction: str | None = None, temperature: float = 0.2) -> dict[str, Any]:
+        try:
+            res = self.primary.generate(prompt, response_schema, system_instruction, temperature)
+            self.last_tokens = self.primary.last_tokens
+            return res
+        except Exception as e:
+            logger.warning("Primary client failed with %s. Falling back to secondary client.", type(e).__name__)
+            res = self.fallback.generate(prompt, response_schema, system_instruction, temperature)
+            self.last_tokens = self.fallback.last_tokens
+            return res
+
+def get_client(model_type: str = "extract") -> HybridClient:
+    from pipeline.config import (
+        GEMINI_API_KEYS, GEMINI_RPM_PER_KEY, GEMINI_EXTRACT_MODEL, GEMINI_FILTER_MODEL, GEMINI_CHAT_MODEL,
+        GROQ_API_KEYS, GROQ_RPM_PER_KEY, GROQ_EXTRACT_MODEL
+    )
+    
+    groq_pool = KeyPool(keys=GROQ_API_KEYS, rpm_per_key=GROQ_RPM_PER_KEY)
+    gemini_pool = KeyPool(keys=GEMINI_API_KEYS, rpm_per_key=GEMINI_RPM_PER_KEY)
+    
+    if model_type == "extract":
+        gemini_model = GEMINI_EXTRACT_MODEL
+    elif model_type == "filter":
+        gemini_model = GEMINI_FILTER_MODEL
+    else:
+        gemini_model = GEMINI_CHAT_MODEL
+        
+    groq_model = GROQ_EXTRACT_MODEL
+    
+    primary = GroqClient(key_pool=groq_pool, model_id=groq_model)
+    fallback = GeminiClient(key_pool=gemini_pool, model_id=gemini_model)
+    
+    return HybridClient(primary, fallback)

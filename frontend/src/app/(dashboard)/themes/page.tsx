@@ -2,8 +2,10 @@ import { fetchApi } from '@/lib/api'
 import ThemesClient from './client'
 import { Suspense } from 'react'
 
+export const revalidate = 60;
+
 async function ThemesData() {
-  const themes = await fetchApi<any[]>('/themes')
+  const themes = await fetchApi<any[]>('/themes', { cache: 'no-store' })
   return <ThemesClient themes={themes || []} />
 }
 

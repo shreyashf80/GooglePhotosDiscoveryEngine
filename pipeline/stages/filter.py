@@ -33,7 +33,7 @@ from pipeline.config import (
     require_model_id,
 )
 from pipeline.db import engine
-from pipeline.llm.client import GeminiClient, ServiceUnavailableError
+from pipeline.llm.client import get_client, ServiceUnavailableError
 from pipeline.llm.key_pool import KeyPool
 from shared.enums import RelevanceClass
 from shared.models import FilterResult
@@ -140,8 +140,7 @@ def run_filter(limit: Optional[int] = None) -> dict:
     prompt_template = prompt_path.read_text()
 
     # Initialize LLM client
-    key_pool = KeyPool(keys=GEMINI_API_KEYS, rpm_per_key=GEMINI_RPM_PER_KEY)
-    client = GeminiClient(key_pool=key_pool, model_id=model_id)
+    client = get_client("filter")
 
     try:
         # Phase 1: Load deduped records and apply keyword prefilter

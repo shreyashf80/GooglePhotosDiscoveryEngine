@@ -166,7 +166,7 @@ export default function ThemesClient({ themes }: { themes: Theme[] }) {
         <TabsContent value="adjacent" className="space-y-4">
           {adjacentThemes.length === 0 ? (
             <div className="text-center p-8 bg-gray-50 rounded-lg text-gray-500 border border-dashed">
-              No adjacent themes identified yet.
+              Not enough adjacent signals to form themes yet. Minimum 5 distinct authors required.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

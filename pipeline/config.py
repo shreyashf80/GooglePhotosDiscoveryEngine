@@ -36,7 +36,7 @@ DATABASE_URL_DIRECT: str = os.getenv("DATABASE_URL_DIRECT", DATABASE_URL)
 
 # --- Gemini LLM ---
 GEMINI_API_KEYS: list[str] = [
-    k.strip() for k in _require_env("GEMINI_API_KEYS").split(",") if k.strip()
+    k.strip() for k in os.getenv("GEMINI_API_KEYS", "").split(",") if k.strip()
 ]
 GEMINI_FILTER_MODEL: str = os.getenv("GEMINI_FILTER_MODEL", "gemini-robotics-er-2-preview")
 GEMINI_EXTRACT_MODEL: str = os.getenv("GEMINI_EXTRACT_MODEL", "gemini-robotics-er-2-preview")
@@ -46,6 +46,13 @@ GEMINI_FALLBACK_MODELS: list[str] = [
     "gemini-3.6-flash",
     "gemini-robotics-er-2-preview"
 ]
+
+# --- Groq LLM ---
+GROQ_API_KEYS: list[str] = [
+    k.strip() for k in os.getenv("GROQ_API_KEY", "").split(",") if k.strip()
+]
+GROQ_EXTRACT_MODEL: str = os.getenv("GROQ_EXTRACT_MODEL", "openai/gpt-oss-120b")
+GROQ_RPM_PER_KEY: int = _env_int("GROQ_RPM_PER_KEY", 25)
 PROMPT_VERSION: str = os.getenv("PROMPT_VERSION", "extract_v2")
 FILTER_PROMPT_VERSION: str = os.getenv("FILTER_PROMPT_VERSION", "filter_v2")
 
@@ -86,7 +93,7 @@ SOURCE_CAPS: dict[str, int] = {
 
 # --- Batch sizes ---
 FILTER_BATCH_SIZE: int = _env_int("FILTER_BATCH_SIZE", 25)
-EXTRACT_BATCH_SIZE: int = _env_int("EXTRACT_BATCH_SIZE", 10)
+EXTRACT_BATCH_SIZE: int = _env_int("EXTRACT_BATCH_SIZE", 3)
 EMBED_BATCH_SIZE: int = _env_int("EMBED_BATCH_SIZE", 100)
 
 # --- Retry limits ---
