@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const maxDuration = 180;
+
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const BACKEND_API_KEY = process.env.BACKEND_API_KEY || 'dev_key';
 

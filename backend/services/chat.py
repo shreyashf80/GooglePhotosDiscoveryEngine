@@ -14,6 +14,7 @@ References: FR-100 – FR-104, FR-106
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -65,7 +66,7 @@ def _call_gemini(
     system_instruction: str | None = None,
     temperature: float = 0.2,
     response_mime_type: str | None = None,
-    max_retries: int = 6,
+    max_retries: int = 2,
 ) -> str:
     """Make a Gemini API call with key rotation and retry logic."""
     import time as _time
@@ -73,7 +74,7 @@ def _call_gemini(
     last_error = None
     for attempt in range(max_retries):
         key = _key_pool.acquire()
-        client = genai.Client(api_key=key)
+        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=30000, retry_options=types.HttpRetryOptions(attempts=1)))
 
         config_kwargs: dict[str, Any] = {"temperature": temperature}
         if response_mime_type:
@@ -469,11 +470,11 @@ async def handle_chat(
         return cached
 
     # Step 1: Rewrite query
-    rewritten = rewrite_query(question)
+    rewritten = await asyncio.to_thread(rewrite_query, question)
     logger.info("Rewritten query: %s", rewritten)
 
     # Step 2: Embed
-    query_embedding = embed_query(rewritten, embedding_model)
+    query_embedding = await asyncio.to_thread(embed_query, rewritten, embedding_model)
 
     # Step 3: Retrieve
     episodes = await retrieve_episodes(query_embedding, limit=12, filters=filters)
@@ -485,7 +486,8 @@ async def handle_chat(
     stats = await get_stats_snapshot()
 
     # Step 5: Generate answer
-    raw_answer = generate_answer(
+    raw_answer = await asyncio.to_thread(
+        generate_answer,
         question=question,
         rewritten_query=rewritten,
         episodes=episodes,

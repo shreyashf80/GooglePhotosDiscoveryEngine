@@ -28,3 +28,14 @@ def test_old_grouped_cache_is_regenerated_with_complete_metadata():
     assert response['answer'] == 'New [E1]'
     assert response['cached'] is False
     assert [citation['id'] for citation in response['citations']] == ['E1']
+
+
+def test_gemini_requests_have_bounded_timeout_and_no_hidden_sdk_retries():
+    from backend.services.chat import _call_gemini
+    with patch('backend.services.chat._key_pool.acquire', return_value='test-key'), \
+         patch('backend.services.chat.genai.Client') as client:
+        client.return_value.models.generate_content.return_value.text = 'answer'
+        assert _call_gemini('question') == 'answer'
+        options = client.call_args.kwargs['http_options']
+    assert options.timeout == 30000
+    assert options.retry_options.attempts == 1
