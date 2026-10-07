@@ -390,13 +390,12 @@ def validate_citations(
     valid_ids = valid_episode_ids | valid_lit_ids
 
     def replace_citation(match: re.Match) -> str:
-        cid = match.group(1)
-        if cid in valid_ids:
-            return f"[{cid}]"
-        return ""  # Strip invalid citation
+        # Expand grouped references so every valid ID gets a citation card.
+        ids = re.findall(r"[ER]\d+", match.group(1))
+        return " ".join(f"[{cid}]" for cid in ids if cid in valid_ids)
 
-    # Match [E1], [R2], etc.
-    cleaned = re.sub(r"\[([ER]\d+)\]", replace_citation, answer)
+    # Match individual references and groups such as [E1, E2, R3].
+    cleaned = re.sub(r"\[([ER]\d+(?:\s*,\s*[ER]\d+)*)\]", replace_citation, answer)
     # Clean up any double spaces left by stripping
     cleaned = re.sub(r"  +", " ", cleaned)
     return cleaned.strip()
@@ -463,7 +462,9 @@ async def handle_chat(
     """
     # Check cache first
     cached = await get_cached_response(question)
-    if cached:
+    # Older cached answers can contain grouped references without citation cards.
+    # Regenerate these rather than returning incomplete evidence metadata.
+    if cached and not re.search(r"\[[ER]\d+\s*,", cached.get("answer", "")):
         cached["cached"] = True
         return cached
 
