@@ -4,6 +4,9 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const BACKEND_API_KEY = process.env.BACKEND_API_KEY || 'dev_key';
 
 export async function POST(request: NextRequest) {
+  if (!process.env.APP_PASSWORD || request.cookies.get('auth_token')?.value !== process.env.APP_PASSWORD) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
 

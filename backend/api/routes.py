@@ -288,6 +288,45 @@ async def list_signals(
         "per_page": per_page
     }
 
+@router.get("/signals/export")
+async def export_signals(
+    scope: Optional[str] = None,
+    relevance_class: Optional[str] = None,
+    theme: Optional[str] = None,
+    source: Optional[str] = None,
+    product: Optional[str] = None,
+    funnel_stage: Optional[str] = None,
+    outcome: Optional[str] = None,
+):
+    filters = dict(scope=scope, relevance_class=relevance_class, theme=theme,
+                   source=source, product=product, funnel_stage=funnel_stage, outcome=outcome)
+    rows = []
+    page = 1
+    while True:
+        result = await list_signals(page=page, per_page=100, **filters)
+        rows.extend(result["items"])
+        if not result["items"] or len(rows) >= result["total"]:
+            break
+        page += 1
+    columns = ["signal_id", "summary_en", "emotional_cost", "outcome", "quote_en",
+               "quote_original", "scope", "source", "created_at", "lang", "url",
+               "remembered", "forgot"]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        values = {}
+        for key in columns:
+            value = row.get(key)
+            if isinstance(value, (list, dict)):
+                value = json.dumps(value, ensure_ascii=False)
+            if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r", "\n")):
+                value = "'" + value
+            values[key] = value
+        writer.writerow(values)
+    return Response(output.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="signals.csv"'})
+
 @router.get("/episodes")
 async def list_episodes(
     page: int = Query(1, ge=1),
