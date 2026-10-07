@@ -102,7 +102,7 @@ export default function EvidenceClient({ initialData, themes = [], searchParams 
     } else {
       params.delete(key);
     }
-    params.delete('page');
+    if (key !== 'page') params.delete('page');
     router.push(`?${params.toString()}`);
   };
 
