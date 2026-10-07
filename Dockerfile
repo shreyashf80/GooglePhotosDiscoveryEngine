@@ -24,6 +24,7 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
 # Pre-download fastembed model assets to bake them into the image
 # This prevents downloading large ML models on cold boot/scaling
+ENV FASTEMBED_CACHE_PATH=/app/.cache/fastembed
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" || true
 
 # Copy application code
