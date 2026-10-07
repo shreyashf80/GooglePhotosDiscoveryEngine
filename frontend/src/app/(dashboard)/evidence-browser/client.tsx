@@ -108,7 +108,7 @@ export default function EvidenceClient({ initialData, themes = [], searchParams 
 
   const handleExport = () => {
     const params = new URLSearchParams(searchParams);
-    window.open(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/v1/signals/export?${params.toString()}`, '_blank');
+    window.open(`/api/signals/export?${params.toString()}`, '_blank');
   };
 
   const { items = [], total = 0, page = 1, per_page = 20 } = initialData || {};
